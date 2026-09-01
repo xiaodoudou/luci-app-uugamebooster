@@ -6,7 +6,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for UUgamebooster
-LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6
+LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat
 LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-uugamebooster
