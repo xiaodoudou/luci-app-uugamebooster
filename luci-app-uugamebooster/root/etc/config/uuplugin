@@ -1,5 +1,19 @@
 config uuplugin
 	option enabled '0'
 	option model 'OpenWrt'
-	option addfw '0'
-
+	option addfw '1'
+	# auto = NetEase's plain OpenWrt build (consoles only)
+	# oem  = its vendor build, which also boosts PCs and phones
+	option arch 'auto'
+	# h3c-nx30pro | h3c-bx54   (only used when arch is 'oem')
+	option oem_model 'h3c-nx30pro'
+	# Empty means detect. Override only if detection is wrong:
+	# x86_64 | aarch64 | arm | mipsel | mipseb
+	option arch_force ''
+	# off | cooperative | bypass
+	option openclash_mode 'cooperative'
+	option oc_interval '5'
+	option oc_min_prefix '8'
+	# all | blacklist | whitelist
+	option device_mode 'all'
+	# match devices by MAC as well as IP

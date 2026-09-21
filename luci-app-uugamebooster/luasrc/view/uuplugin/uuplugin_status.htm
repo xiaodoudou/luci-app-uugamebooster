@@ -1,21 +1,170 @@
+<style type="text/css">
+/* Layout comes from LuCI's own cbi-value / cbi-value-title / cbi-value-field
+   classes, so labels pick up the theme's normal label colour and the rows line
+   up with the settings form below. Only the bits LuCI has no class for are
+   styled here, and those derive from currentColor so they work on light and
+   dark themes alike. */
+#uu-status .uu-dot {
+	display: inline-block;
+	width: .6em;
+	height: .6em;
+	border-radius: 50%;
+	margin-right: .5em;
+}
+#uu-status .ok   { background: #3fa14a; }
+#uu-status .bad  { background: #e05252; }
+#uu-status .warn { background: #e0912f; }
+#uu-status .t-ok   { color: #3fa14a; font-weight: 600; }
+#uu-status .t-bad  { color: #e05252; font-weight: 600; }
+#uu-status .t-warn { color: #e0912f; font-weight: 600; }
+
+#uu-status .uu-muted { opacity: .6; }
+#uu-status .uu-num { font-weight: 600; }
+
+/* Inherit the surrounding colour: themes otherwise force a dark foreground on
+   <code>, which vanishes against a dark panel. */
+#uu-status code {
+	color: inherit;
+	background: rgba(128, 128, 128, .20);
+	border: 1px solid rgba(128, 128, 128, .26);
+	padding: .08em .45em;
+	border-radius: 3px;
+	font-size: .92em;
+	white-space: nowrap;
+}
+
+#uu-status .uu-alert {
+	margin: .5em 0;
+	padding: .65em .85em;
+	border-left: 3px solid #e05252;
+	background: rgba(224, 82, 82, .12);
+	border-radius: 3px;
+	line-height: 1.6;
+}
+</style>
+
 <script type="text/javascript">//<![CDATA[
-XHR.poll(3, '<%=url([[admin]], [[services]], [[uuplugin]], [[status]])%>', null,
-	function(x, data) {
-		var tb = document.getElementById('uuplugin_status');
-		if (data && tb) {
-			if (data.running) {
-				tb.innerHTML = '<em><b><font color=green>UU GameAcc <%:运行中%></font></b></em>';
-			} else {
-				tb.innerHTML = '<em><b><font color=red>UU GameAcc <%:未运行%></font></b></em>';
+function uuRow(k, v, last) {
+	return '<div class="cbi-value' + (last ? ' cbi-value-last' : '') + '">' +
+	       '<label class="cbi-value-title">' + k + '</label>' +
+	       '<div class="cbi-value-field">' + v + '</div>' +
+	       '</div>';
+}
+
+var uuUrl = '<%=url([[admin]], [[services]], [[uuplugin]], [[status]])%>';
+
+function uuRender(d) {
+		var el = document.getElementById('uu-status');
+		if (!d || !el) return;
+
+		var h = '';
+
+		// "Running" alone is misleading: after every start the plugin has to
+		// register with NetEase before the phone app can find the router.
+		var svc;
+		if (d.phase == 'ready')
+			svc = '<span class="uu-dot ok"></span><span class="t-ok"><%:Ready%></span>';
+		else if (d.phase == 'starting')
+			svc = '<span class="uu-dot warn"></span><span class="t-warn"><%:Starting%>&hellip;</span>' +
+			      ' <span class="uu-muted">&ndash; <%:no connection to NetEase yet%></span>';
+		else if (d.phase == 'registering')
+			svc = '<span class="uu-dot warn"></span><span class="t-warn"><%:Registering%>&hellip;</span>' +
+			      ' <span class="uu-muted">&ndash; <%:the app cannot find the router yet%></span>';
+		else
+			svc = '<span class="uu-dot bad"></span><span class="t-bad"><%:Not running%></span>';
+		h += uuRow('<%:Service%>', svc);
+
+		// Registration only matters while coming up - once Ready it restates
+		// what the service line already said. The control server address is
+		// worth keeping either way: it is the one piece of live information
+		// here that says which NetEase endpoint the tunnel is actually talking
+		// to, and it changes between sessions.
+		if (d.running && d.phase != 'ready') {
+			h += uuRow('<%:Registration%>', d.activated
+				? '<code>' + d.activated + '</code>'
+				: '<span class="uu-muted"><%:not registered yet%></span>');
+		}
+		if (d.running) {
+			h += uuRow('<%:NetEase link%>', d.cloud
+				? '<span class="uu-dot ok"></span><code>' + d.cloud + '</code>'
+				: '<span class="uu-muted"><%:connecting%>&hellip;</span>');
+		}
+
+		if (d.foreign) {
+			h += '<div class="uu-alert"><span class="t-bad"><%:Conflicting UU installation%></span><br />' +
+			     '<code>' + d.foreign + '</code><br />' +
+			     '<%:It owns the PID file, so this service cannot start. Run%> ' +
+			     '<code>/etc/init.d/uuplugin takeover</code> <%:to hand over.%></div>';
+		}
+
+		var buildText = {
+			'oem-native':   '<%:vendor build, running natively - consoles, PCs and phones%>',
+			'oem-emulated': '<%:vendor build, emulated - consoles, PCs and phones%>',
+			'generic':      '<%:standard build - game consoles only%>'
+		}[d.build] || '';
+		h += uuRow('<%:Running%>', '<code>' + (d.arch || '?') + '</code>' +
+			(buildText ? ' <span class="uu-muted">' + buildText + '</span>' : ''));
+
+		h += uuRow('<%:Tunnel%>', d.tun
+			? '<code>' + d.tun + '</code>'
+			: '<span class="uu-muted"><%:none yet%></span>');
+
+		h += uuRow('<%:Boosted devices%>', d.boosted
+			? '<span class="uu-dot ok"></span><code>' +
+			  d.boosted.replace(/ /g, '</code> <code>') + '</code>'
+			: '<span class="uu-muted"><%:none - boost a device in the UU app%></span>');
+
+		if (!d.openclash_installed) {
+			h += uuRow('<%:OpenClash%>', '<span class="uu-muted"><%:not installed%></span>', true);
+		} else {
+			h += uuRow('<%:OpenClash%>', d.openclash_running
+				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
+				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>');
+
+			var coop = (d.mode == 'cooperative');
+			h += uuRow('<%:Coexistence%>', '<code>' + (d.mode || '?') + '</code>', !coop);
+
+			if (coop) {
+				h += uuRow('<%:Exempted from proxy%>', (d.bypassed > 0)
+					? '<span class="uu-num">' + d.bypassed + '</span> <%:game destinations, for boosted devices only%>'
+					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', true);
 			}
 		}
-	}
-);
-//]]>
-</script>
-<style>.mar-10 {margin-left: 50px; margin-right: 10px;}</style>
+
+		el.innerHTML = h;
+}
+
+// Deliberately not XHR.poll(). Two reasons, both things that went wrong with it:
+// its first request waits for the interval to elapse, so the panel sat on
+// "Collecting data..." with nothing to show; and LuCI halts its polling while a
+// Save & Apply is in flight, which left the panel frozen on the old state until
+// the page was reloaded by hand.
+//
+// A plain interval starts immediately, survives the apply overlay, and a bad
+// response cannot stop the loop.
+function uuFetch() {
+	if (document.hidden)
+		return;                  // no point polling a tab nobody is looking at
+	var x = new XMLHttpRequest();
+	x.open('GET', uuUrl + '?_=' + Date.now(), true);
+	x.onload = function() {
+		try {
+			uuRender(JSON.parse(x.responseText));
+		} catch (e) {
+			/* Keep polling. One bad response is not a reason to stop. */
+		}
+	};
+	x.send();
+}
+
+uuFetch();
+setInterval(uuFetch, 1000);
+document.addEventListener('visibilitychange', function() {
+	if (!document.hidden) uuFetch();
+});
+//]]></script>
+
 <fieldset class="cbi-section">
-	<p id="uuplugin_status">
-		<em><%:Collecting data...%></em>
-	</p>
+	<legend><%:Status%></legend>
+	<div id="uu-status"><em><%:Collecting data...%></em></div>
 </fieldset>

@@ -1,0 +1,53 @@
+<%#
+ Rendered as a DummyValue template inside the "How to use" tab, so it has to emit
+ cbi-value rows itself rather than its own fieldset - the tab is already one.
+
+ Note on the two translation forms used below. The colon form translates and
+ HTML-escapes, so any markup inside the string reaches the page as visible text.
+ The underscore form translates without escaping, and is what the strings
+ containing markup use. Plain strings stay on the colon form.
+
+ Do not write either delimiter out in full in this comment: the closing sequence
+ would end the comment early and the rest would render as page content.
+-%>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:Steps%></label>
+	<div class="cbi-value-field">
+		<ol style="margin:0; padding-left:1.4em">
+			<li><%_Turn the service on under <strong>General</strong>, then Save &amp; Apply.%></li>
+			<li><%_Wait for the panel above to reach <strong>Ready</strong>. Until then the app cannot find this router, even though the service is running.%></li>
+			<li><%:Install the UU app and sign in. A NetEase account is required.%></li>
+			<li><%_In the app, bind this router. It appears under the name set as <strong>Router name</strong>.%></li>
+			<li><%_Pick the device to boost. Consoles are offered by default; for a PC or phone, set <strong>What to boost</strong> accordingly first.%></li>
+		</ol>
+	</div>
+</div>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:Get the app%></label>
+	<div class="cbi-value-field">
+		<p id="uugamebooster_qcode" style="margin-top:0">
+			<img src="/uuios.png" height="220" alt="iOS" />
+			<img src="/uuandriod.png" height="220" alt="Android" />
+		</p>
+		<div class="cbi-value-description">
+			<%:Scan with your phone: iOS on the left, Android on the right.%>
+		</div>
+	</div>
+</div>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:If a device is missing%></label>
+	<div class="cbi-value-field">
+		<div class="cbi-value-description">
+			<%_Check <strong>Device visibility</strong>. If it is set to a whitelist, the app only ever sees the devices listed there.%>
+		</div>
+	</div>
+</div>
+<div class="cbi-value">
+	<label class="cbi-value-title"><%:Good to know%></label>
+	<div class="cbi-value-field">
+		<div class="cbi-value-description">
+			<%:The UU app and its service are operated by NetEase and are aimed at users in mainland China.%>
+			<%:Boosting is not always on: traffic only takes UU's tunnel for a device you have picked in the app, and only for the game servers UU routes there.%>
+		</div>
+	</div>
+</div>

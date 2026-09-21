@@ -1,0 +1,184 @@
+#!/bin/sh
+# uu-detect - report which UU booster instances are running.
+#
+# Prints two lines:
+#   ours=<pid>              our own binary, run from $RUN_DIR
+#   foreign=<what> (pid N)  a UU install this plugin does not manage
+#
+# NetEase's official OpenWrt installer puts a watchdog in /usr/sbin/uu and runs
+# the binary from /tmp/uu. Both instances try to own /var/run/uuplugin.pid, so
+# starting ours while that one is alive just produces a procd crash loop -
+# hence the need to detect it up front.
+#
+# On busybox, "pgrep -f <path>" matches the shell running the check, because
+# that shell's own command line contains the pattern. "pgrep -x uuplugin" is no
+# better: it misses a process whose comm is an exact match. Plain pgrep matches
+# the process NAME only (a shell is never called "uuplugin"), and comparing
+# /proc/<pid>/exe then says definitively whose instance it is.
+
+RUN_DIR="${RUN_DIR:-/var/tmp/uu}"
+OURS_PATH="$(readlink -f "$RUN_DIR/uuplugin" 2>/dev/null)"
+
+ours=""
+foreign=""
+
+for pid in $(pgrep uuplugin 2>/dev/null); do
+	# Plain readlink, not -f: a binary that is still running after its file was
+	# deleted resolves to "<path> (deleted)", and -f would return nothing at
+	# all - which would hide exactly the instance we most need to notice.
+	exe="$(readlink "/proc/$pid/exe" 2>/dev/null)"
+	exe="${exe% (deleted)}"
+	[ -n "$exe" ] || continue
+	case "$exe" in
+		*/uuplugin) ;;
+		*) continue ;;
+	esac
+	if [ -n "$OURS_PATH" ] && [ "$exe" = "$OURS_PATH" ]; then
+		ours="$pid"
+	else
+		foreign="$exe (pid $pid)"
+	fi
+done
+
+# Under emulation the process is qemu with the OEM plugin among its arguments,
+# so matching on the process name cannot find it.
+if [ -z "$ours" ]; then
+	for pid in $(ls -1 /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+		[ -r "/proc/$pid/cmdline" ] || continue
+		cmd="$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ')"
+		case "$cmd" in
+			*qemu-aarch64-static*uu-oem/uuplugin*) ours="$pid"; break ;;
+		esac
+	done
+fi
+
+# The official watchdog respawns the binary, so it conflicts even during the
+# moments the binary itself is down.
+if [ -z "$foreign" ] && [ -f /usr/sbin/uu/uuplugin_monitor.sh ]; then
+	mpid=$(pgrep -f "uuplugin_monitor.sh" 2>/dev/null | head -n1)
+	[ -n "$mpid" ] && foreign="NetEase official installer, /usr/sbin/uu (pid $mpid)"
+fi
+
+# OpenClash ships its core under several names (clash, clash_meta, mihomo), and
+# "pgrep -x clash" reports nothing even when comm is exactly "clash". Resolving
+# /proc/<pid>/exe and checking it lives under /etc/openclash is unambiguous.
+openclash=""
+for pid in $(pgrep clash 2>/dev/null; pgrep mihomo 2>/dev/null); do
+	exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null)"
+	case "$exe" in
+		/etc/openclash/*) openclash="$pid"; break ;;
+	esac
+done
+
+# Devices UU is boosting right now.
+#
+# UU adds a policy routing rule per boosted device ("from <ip> lookup <table>")
+# pointing at a table that routes into its tunnel. It usually also creates an
+# XU_ACC_DEVICE_<ip> nftables table, but not always: the OEM build running
+# under emulation sets up routing and never manages to create those tables,
+# yet boosts fine. So the ip rule is the reliable signal and the nft table is
+# only a supplement.
+#
+# Field-split rather than pattern-match the rule text: "ip rule show" separates
+# the priority from the rule with a tab, so a pattern expecting a space around
+# "from" silently matches nothing.
+boosted="$( {
+	ip rule show 2>/dev/null | awk '
+		{ f = ""; t = ""
+		  for (i = 1; i <= NF; i++) {
+		      if ($i == "from")   f = $(i + 1)
+		      if ($i == "lookup") t = $(i + 1)
+		  }
+		  if (f != "" && t != "" && f != "all") print f, t }' |
+	while read -r bip btbl; do
+		# Only count it when that table really routes into a UU tunnel.
+		ip route show table "$btbl" 2>/dev/null | grep -q "dev tun16" && echo "$bip"
+	done
+	nft list tables 2>/dev/null |
+		sed -n 's/.*XU_ACC_DEVICE_\([0-9][0-9.]*\)_.*/\1/p'
+} | sort -u | tr '\n' ' ')"
+
+# A running process is not the same as a usable one. After every start the
+# plugin has to register with NetEase before the phone app can find the router,
+# and that takes a while - during which "running" is true but binding fails.
+# Report the two states separately so the UI can say which one it is.
+#
+# cloud:     an established connection to UU's control servers
+# activated: the plugin has written its registration record
+cloud=""
+if [ -n "$ours" ]; then
+	cloud=$(netstat -np 2>/dev/null |
+		awk -v p="^$ours/" '$6 == "ESTABLISHED" && $7 ~ p { print $5 }' |
+		grep -v '^127\.' | head -n1)
+fi
+
+activated=""
+[ -s /tmp/uu/activate_status ] && \
+	activated=$(head -n1 /tmp/uu/activate_status 2>/dev/null)
+
+# One device list, two possible meanings, so whichever is shorter to maintain
+# can be used: blacklist ignores the listed devices, whitelist considers only
+# them. Filtering here rather than in each consumer keeps the status page and
+# the OpenClash integration agreeing on what counts as boosted.
+dmode="$(uci -q get uuplugin.@uuplugin[0].device_mode 2>/dev/null)"
+dlist="$(uci -q get uuplugin.@uuplugin[0].device_ip 2>/dev/null)"
+
+# MAC entries are resolved to whatever address the device currently holds and
+# folded into the same list, so both kinds of entry behave identically. A MAC
+# is the more stable way to name a device that gets its address by DHCP.
+dmacs="$(uci -q get uuplugin.@uuplugin[0].device_mac 2>/dev/null)"
+for m in $dmacs; do
+	m=$(printf '%s' "$m" | tr 'A-Z' 'a-z')
+	mip=$(awk -v m="$m" 'tolower($2) == m { print $3; exit }' /tmp/dhcp.leases 2>/dev/null)
+	[ -z "$mip" ] && mip=$(ip neigh show 2>/dev/null |
+		awk -v m="$m" 'tolower($5) == m { print $1; exit }')
+	[ -n "$mip" ] && dlist="$dlist $mip"
+done
+
+boosted_all="$boosted"
+if [ -n "$boosted" ] && [ -n "$dlist" ]; then
+	case "$dmode" in
+		blacklist)
+			boosted="$(printf '%s\n' $boosted |
+				grep -vxF "$(printf '%s\n' $dlist)" | tr '\n' ' ')"
+			;;
+		whitelist)
+			boosted="$(printf '%s\n' $boosted |
+				grep -xF "$(printf '%s\n' $dlist)" | tr '\n' ' ')"
+			;;
+	esac
+fi
+
+# Devices UU is boosting that the list says it should not be. Reported so the
+# sync daemon can undo the boost rather than merely ignore it.
+blocked=""
+for b in $boosted_all; do
+	printf '%s\n' $boosted | grep -qxF "$b" || blocked="$blocked $b"
+done
+
+# Which build is actually running, read from the live command line rather than
+# from config: the choice between running an OEM build natively and emulating it
+# is made at start-up from the binary's ELF header, so config alone cannot say.
+build=""
+if [ -n "$ours" ] && [ -r "/proc/$ours/cmdline" ]; then
+	case "$(tr '\0' ' ' < "/proc/$ours/cmdline")" in
+		*qemu-*-static*uu-oem/uuplugin*) build="oem-emulated" ;;
+		*uu-oem/uuplugin*)               build="oem-native" ;;
+		*)                               build="generic" ;;
+	esac
+fi
+
+echo "ours=$ours"
+echo "build=$build"
+echo "foreign=$foreign"
+echo "openclash=$openclash"
+echo "boosted=${boosted% }"
+echo "blocked=${blocked# }"
+
+# The configured list, with MAC entries already resolved to addresses, so the
+# firewall rule that governs who may enter the tunnel can be built from config
+# alone - it must not depend on having noticed a boost first.
+echo "listmode=${dmode:-all}"
+echo "listips=$(echo $dlist)"
+echo "cloud=$cloud"
+echo "activated=$activated"

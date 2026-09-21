@@ -1,0 +1,140 @@
+#!/bin/sh
+# uu-view - build the filtered view of the LAN that the UU plugin is allowed
+# to see, so only chosen devices ever reach NetEase's cloud and the phone app.
+#
+# Usage: uu-view refresh | watch | paths
+#
+# The plugin enumerates devices from the DHCP lease file, the ARP table and the
+# IPv6 neighbour table, and reports them upstream, which is why the app
+# otherwise lists every host on the network. It reads fixed paths and offers no
+# way to point it elsewhere, so the copies are substituted from the outside:
+# the plain files are bind-mounted over the real ones in the plugin's private
+# mount namespace, and the two sources that cannot be mounted over - the ARP
+# table and the "ip -6 neigh show" the plugin shells out to - are redirected
+# here by the LD_PRELOAD shim in src/uu-view-preload.c. Nothing else on the
+# router is affected: the real files keep every lease, and dnsmasq is untouched.
+#
+# The copies are rewritten in place rather than replaced. A bind mount follows
+# the inode, so creating a new file would leave the plugin looking at the old
+# contents for ever.
+
+VIEW_DIR="/var/run/uu-view"
+V_LEASES="$VIEW_DIR/dhcp.leases"
+V_ARP="$VIEW_DIR/arp"
+V_NMP="$VIEW_DIR/nmp_client_list"
+V_V6="$VIEW_DIR/v6neigh"
+
+R_LEASES="/tmp/dhcp.leases"
+R_ARP="/proc/net/arp"
+R_NMP="/tmp/nmp_client_list"
+
+uci_get() { uci -q get "uuplugin.@uuplugin[0].$1"; }
+
+MODE="$(uci_get device_mode)"
+[ -z "$MODE" ] && MODE="all"
+IPS="$(uci_get device_ip)"
+MACS="$(uci_get device_mac | tr 'A-Z' 'a-z')"
+INTERVAL="$(uci_get view_interval)"
+[ -z "$INTERVAL" ] && INTERVAL=10
+
+# Is this device allowed to be visible? Matched on either address or MAC, so a
+# DHCP device can be named by the MAC that does not change.
+allowed() {
+	local aip="$1" amac="$2" e
+	amac="$(printf '%s' "$amac" | tr 'A-Z' 'a-z')"
+
+	case "$MODE" in
+		whitelist)
+			for e in $IPS;  do [ "$e" = "$aip" ]  && return 0; done
+			for e in $MACS; do [ "$e" = "$amac" ] && return 0; done
+			return 1
+			;;
+		blacklist)
+			for e in $IPS;  do [ "$e" = "$aip" ]  && return 1; done
+			for e in $MACS; do [ "$e" = "$amac" ] && return 1; done
+			return 0
+			;;
+		*)
+			return 0
+			;;
+	esac
+}
+
+# The address currently paired with a MAC, so a device named by address in the
+# list is still recognised in the IPv6 neighbour table, which carries only MACs.
+ip_for_mac() {
+	[ -n "$1" ] || return 0
+	awk -v m="$1" 'tolower($4) == m { print $1; exit }' "$R_ARP" 2>/dev/null
+}
+
+# The MAC an "ip -6 neigh show" line reports, if it reports one at all.
+lladdr_of() {
+	printf '%s' "$1" | awk '{ for (i = 1; i < NF; i++)
+		if ($i == "lladdr") { print tolower($(i + 1)); exit } }'
+}
+
+refresh() {
+	mkdir -p "$VIEW_DIR"
+
+	# Truncate-and-append, never recreate, so the bind mount keeps working.
+	: > "$V_LEASES"
+	if [ -f "$R_LEASES" ]; then
+		while read -r exp mac addr host rest; do
+			[ -n "$addr" ] || continue
+			allowed "$addr" "$mac" && \
+				printf '%s %s %s %s %s\n' "$exp" "$mac" "$addr" "$host" "$rest" >> "$V_LEASES"
+		done < "$R_LEASES"
+	fi
+
+	: > "$V_ARP"
+	if [ -r "$R_ARP" ]; then
+		head -n1 "$R_ARP" > "$V_ARP" 2>/dev/null
+		tail -n +2 "$R_ARP" 2>/dev/null | while read -r addr hwt fl mac mask dev rest; do
+			[ -n "$addr" ] || continue
+			allowed "$addr" "$mac" && \
+				printf '%-16s %-10s %-10s %-19s %-9s %s\n' \
+					"$addr" "$hwt" "$fl" "$mac" "$mask" "$dev" >> "$V_ARP"
+		done
+	fi
+
+	# No real file to copy here: the plugin runs "ip -6 neigh show" and the
+	# shim points that at this instead. A neighbour with no lladdr cannot be
+	# identified, so it is kept only when the list says what to exclude.
+	: > "$V_V6"
+	if command -v ip >/dev/null 2>&1; then
+		ip -6 neigh show 2>/dev/null | while IFS= read -r line; do
+			m=$(lladdr_of "$line")
+			allowed "$(ip_for_mac "$m")" "$m" && echo "$line" >> "$V_V6"
+		done
+	fi
+
+	: > "$V_NMP"
+	if [ -f "$R_NMP" ]; then
+		while IFS= read -r line; do
+			a=$(printf '%s' "$line" | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1)
+			m=$(printf '%s' "$line" | grep -oiE '([0-9a-f]{2}:){5}[0-9a-f]{2}' | head -n1)
+			allowed "$a" "$m" && printf '%s\n' "$line" >> "$V_NMP"
+		done < "$R_NMP"
+	fi
+}
+
+# Print the bind-mount pairs the service should apply, skipping sources that do
+# not exist on this system.
+paths() {
+	[ -f "$R_LEASES" ] && echo "$V_LEASES $R_LEASES"
+	[ -r "$R_ARP" ]    && echo "$V_ARP $R_ARP"
+	[ -f "$R_NMP" ]    && echo "$V_NMP $R_NMP"
+}
+
+case "${1:-refresh}" in
+	refresh) refresh ;;
+	paths)   refresh; paths ;;
+	watch)
+		# Leases change as devices come and go, so keep the view current.
+		while :; do
+			refresh
+			sleep "$INTERVAL" & wait $!
+		done
+		;;
+	*) echo "usage: $0 refresh|watch|paths" >&2; exit 1 ;;
+esac

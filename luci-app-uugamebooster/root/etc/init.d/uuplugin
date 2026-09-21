@@ -1,34 +1,387 @@
 #!/bin/sh /etc/rc.common
+# NetEase UU Game Booster - OpenWrt service
+#
+# Uses NetEase's generic "openwrt-<arch>" plugin family, which includes an
+# official x86_64 build. The vendor-specific h3c-*/jd-* builds used by the
+# original project exist only for arm, aarch64 and mipsel.
 
 USE_PROCD=1
 START=99
 STOP=15
 
+EXTRA_COMMANDS="takeover cleanup_legacy prepare_oem"
+EXTRA_HELP="	takeover	Remove a UU install made by NetEase's official script
+	cleanup_legacy	Report redundant hand-made UU firewall rules; add 'apply' to remove
+	prepare_oem	Fetch qemu and the aarch64 sysroot for the emulated OEM build"
+
 CONF="uuplugin"
-PROG="/var/tmp/uu/uuplugin"
-UU_CONF="/var/tmp/uu/uu.conf"
-UU_INFO="/var/tmp/uu/h3c_info"
-UU_SN="/tmp/haiapi"
-armuurl="https://router.uu.163.com/api/plugin?type=h3c-bx54"
-#armuurl="https://router.uu.163.com/api/plugin?type=h3c-ne36"
-aarch64uurl="https://router.uu.163.com/api/plugin?type=h3c-nx30pro"
-#mipsuurl="https://router.uu.163.com/api/plugin?type=h3c-nx15"
-#mipseluurl="https://router.uu.163.com/api/plugin?type=h3c"
-mipseluurl="https://router.uu.163.com/api/plugin?type=jd-hr06"
-SN=$(ip addr show br-lan | grep "link/ether" | awk '{print $2}')
+RUN_DIR="/var/tmp/uu"
+PROG="$RUN_DIR/uuplugin"
+UU_CONF="$RUN_DIR/uu.conf"
+TARBALL="/tmp/uu.tar.gz"
+API="https://router.uu.163.com/api/plugin?type="
+SYNC="/usr/libexec/uuplugin/uu-openclash-sync"
+DETECT="/usr/libexec/uuplugin/uu-detect"
+VIEW="/usr/libexec/uuplugin/uu-view"
+PRELOAD_DIR="/usr/lib/uuplugin"
+
+# The view filter has to match the plugin's own architecture, not the router's:
+# under emulation the plugin is aarch64 while the router is x86_64.
+preload_for() {
+	local a="$1"
+	case "$a" in
+		mipseb) a="mips" ;;
+	esac
+	echo "$PRELOAD_DIR/uu-view-preload-$a.so"
+}
+
+# Prefix for the launch line of a natively executed plugin. procd's own
+# LD_PRELOAD is kept, since there it is the right architecture.
+with_preload() {
+	printf 'LD_PRELOAD="${LD_PRELOAD:+$LD_PRELOAD:}%s"; export LD_PRELOAD;' "$1"
+}
+
+# --- OEM build under emulation -----------------------------------------------
+#
+# NetEase only ships PC/phone boosting in its vendor (OEM) builds, which report
+# "hw: h3c" rather than "hw: openwrt". Those are published per vendor model, not
+# per architecture, so which routers can use them is decided by reading the ELF
+# header of the binary that actually arrives:
+#
+#   - same architecture as this router  -> run it directly, nothing else needed
+#   - aarch64 build on an x86_64 router -> run it under qemu user-mode emulation
+#   - anything else                     -> refuse with a clear reason
+#
+# The emulation path needs a static qemu and an aarch64 musl sysroot, neither of
+# which is in OpenWrt's feeds. Both are bundled in the x86_64 package, and can
+# also be fetched on demand (the OEM binary is dynamically linked, unlike the
+# static generic build, so it needs a real loader and libstdc++).
+OEM_DIR="/opt/uu-oem"
+OEM_SYSROOT="$OEM_DIR/sysroot"
+OEM_DEFAULT_MODEL="h3c-nx30pro"
+OEM_MODE=""
+QEMU="$OEM_DIR/qemu-aarch64-static"
+QEMU_URL="https://github.com/multiarch/qemu-user-static/releases/download/v7.2.0-1/qemu-aarch64-static"
+QEMU_SHA256="dce64b2dc6b005485c7aa735a7ea39cb0006bf7e5badc28b324b2cd0c73d883f"
+OEM_LIB_BASE="https://downloads.openwrt.org/releases/23.05.5/targets/armsr/armv8/packages"
+OEM_LIBS="libc_1.2.4-4_aarch64_generic.ipk libgcc1_12.3.0-4_aarch64_generic.ipk libstdcpp6_12.3.0-4_aarch64_generic.ipk"
+
+uu_log() { echo "$@"; }
+
+# ---------------------------------------------------------------- arch detect
+
+# Endianness of the running system, read from the ELF header of a known binary
+# (EI_DATA, byte 5: 1 = little endian, 2 = big endian).
+# busybox always provides hexdump; od is not in the base image, so it is only
+# ever a last resort. Getting this wrong would silently pick the little-endian
+# build on a big-endian MIPS router.
+detect_endian() {
+	local probe b
+	for probe in /bin/busybox /bin/sh /sbin/init; do
+		[ -f "$probe" ] || continue
+		b=$(dd if="$probe" bs=1 skip=5 count=1 2>/dev/null | hexdump -v -e '1/1 "%d"' 2>/dev/null)
+		[ -z "$b" ] && b=$(dd if="$probe" bs=1 skip=5 count=1 2>/dev/null | hexdump -C 2>/dev/null | head -1 | awk '{print $2}')
+		[ -z "$b" ] && b=$(dd if="$probe" bs=1 skip=5 count=1 2>/dev/null | od -An -tu1 2>/dev/null | tr -d ' \n')
+		case "$b" in
+			1|01) echo "el"; return 0 ;;
+			2|02) echo "eb"; return 0 ;;
+		esac
+	done
+	# Fallback: little endian is by far the common case.
+	echo "el"
+}
+
+detect_arch() {
+	case "$(uname -m)" in
+		x86_64|amd64)             echo "x86_64" ;;
+		aarch64|arm64|armv8*)     echo "aarch64" ;;
+		arm|armv5*|armv6*|armv7*) echo "arm" ;;
+		mips64el|mipsel)          echo "mipsel" ;;
+		mips64|mipseb)            echo "mipseb" ;;
+		mips)                     echo "mips$(detect_endian)" ;;
+		*)                        echo "" ;;
+	esac
+}
+
+# What a binary was actually built for. The OEM builds are published per vendor
+# model rather than per architecture, so the only reliable way to know whether
+# this router can run one directly is to look at the ELF header: e_machine, the
+# 2-byte field at offset 18, in the byte order EI_DATA (offset 5) declares.
+elf_arch() {
+	local f="$1" m
+	[ -r "$f" ] || return 1
+	set -- $(hexdump -n 20 -v -e '20/1 "%d "' "$f" 2>/dev/null)
+	[ $# -ge 20 ] || return 1
+	if [ "$6" = "2" ]; then
+		m=$(( ${19} * 256 + ${20} ))
+	else
+		m=$(( ${19} + ${20} * 256 ))
+	fi
+	case "$m" in
+		62)  echo "x86_64" ;;
+		183) echo "aarch64" ;;
+		40)  echo "arm" ;;
+		8)   echo "mips" ;;      # endianness is in EI_DATA, not e_machine
+		*)   echo "" ;;
+	esac
+}
+
+# The device list filters the ARP table by interposing the plugin's own calls,
+# which needs a dynamic loader to honour LD_PRELOAD. Every UU build seen so far
+# is dynamically linked, but a static one would defeat the filter silently
+# rather than fail, so it is checked rather than assumed.
+is_dynamic() {
+	grep -qa 'ld-musl\|ld-linux' "$1" 2>/dev/null
+}
+
+# Can this router execute that binary without help? MIPS is reported coarsely by
+# e_machine, so it is compared on the family alone.
+runs_natively() {
+	local want="$1" have
+	have="$(detect_arch)"
+	case "$want" in
+		mips) case "$have" in mips*) return 0 ;; esac; return 1 ;;
+	esac
+	[ -n "$want" ] && [ "$want" = "$have" ]
+}
+
+# ---------------------------------------------------------------- download
+
+# The API answers with: <url>,<md5>,<mirror_url>,
+#
+# It only does so when asked for plain text; otherwise it returns JSON. The
+# Accept header alone is not enough, because curl is not part of the OpenWrt
+# base image and wget/uclient-fetch will not send it - so the request carries
+# &output=text as well. NetEase's own installer does the same.
+fetch_meta() {
+	local url="$1&output=text" out
+	out=$(curl -L -s -k --connect-timeout 10 -H "Accept:text/plain" "$url" 2>/dev/null)
+	[ -n "$out" ] || out=$(wget -q --no-check-certificate -O - "$url" 2>/dev/null)
+	[ -n "$out" ] || out=$(uclient-fetch -q --no-check-certificate -O - "$url" 2>/dev/null)
+
+	# Belt and braces: if a JSON body still comes back, read the fields out of it.
+	case "$out" in
+		\{*)
+			out="$(printf '%s' "$out" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p'),$(printf '%s' "$out" | sed -n 's/.*"md5":"\([^"]*\)".*/\1/p')"
+			;;
+	esac
+	echo "$out"
+}
+
+fetch_file() {
+	local url="$1" dest="$2"
+	curl -L -s -k --connect-timeout 15 "$url" -o "$dest" 2>/dev/null && [ -s "$dest" ] && return 0
+	wget -q --no-check-certificate "$url" -O "$dest" 2>/dev/null && [ -s "$dest" ] && return 0
+	return 1
+}
+
+download_plugin() {
+	local type="$1" meta purl pmd5 burl got
+
+	uu_log "Querying NetEase for the '$type' build..."
+	meta=$(fetch_meta "${API}${type}")
+	if [ -z "$meta" ]; then
+		uu_log "ERROR: no response from the UU API. Check the router's internet access and DNS."
+		return 1
+	fi
+
+	purl=$(echo "$meta" | cut -d',' -f1)
+	pmd5=$(echo "$meta" | cut -d',' -f2)
+	burl=$(echo "$meta" | cut -d',' -f3)
+
+	if [ -z "$purl" ] || [ -z "$pmd5" ]; then
+		uu_log "ERROR: UU publishes no build for type '$type'."
+		return 1
+	fi
+
+	# Guard against a malformed or unexpected API response being treated as a URL.
+	case "$purl" in
+		http://*|https://*) ;;
+		*)
+			uu_log "ERROR: unexpected API response for '$type': $meta"
+			return 1
+			;;
+	esac
+
+	uu_log "Downloading $purl"
+	rm -f "$TARBALL"
+	if ! fetch_file "$purl" "$TARBALL"; then
+		if [ -n "$burl" ]; then
+			uu_log "Primary download failed, trying mirror $burl"
+			fetch_file "$burl" "$TARBALL" || { uu_log "ERROR: download failed."; return 1; }
+		else
+			uu_log "ERROR: download failed."
+			return 1
+		fi
+	fi
+
+	got=$(md5sum "$TARBALL" 2>/dev/null | awk '{print $1}')
+	if [ "$got" != "$pmd5" ]; then
+		uu_log "ERROR: checksum mismatch (expected $pmd5, got $got). Discarding download."
+		rm -f "$TARBALL"
+		return 1
+	fi
+
+	mkdir -p "$RUN_DIR"
+	if ! tar zxf "$TARBALL" -C "$RUN_DIR" 2>/dev/null; then
+		uu_log "ERROR: could not extract $TARBALL"
+		rm -f "$TARBALL"
+		return 1
+	fi
+	rm -f "$TARBALL"
+	uu_log "Installed to $PROG"
+	return 0
+}
+
+# ---------------------------------------------------------------- oem setup
+
+# Fetch everything the emulated OEM build needs. Safe to re-run: each piece is
+# skipped when it is already present and valid.
+# Undo the emulation wrapper, for a router that runs the OEM build natively.
+restore_guardian() {
+	[ -f "$OEM_DIR/xuplugin-guardian.real" ] || return 0
+	grep -q qemu "$OEM_DIR/xuplugin-guardian" 2>/dev/null || return 0
+	mv -f "$OEM_DIR/xuplugin-guardian.real" "$OEM_DIR/xuplugin-guardian"
+	chmod +x "$OEM_DIR/xuplugin-guardian"
+	uu_log "Restored UU's own guardian; no emulation wrapper is needed here."
+}
+
+# Sets OEM_MODE to "native" or "emulated" on success.
+prepare_oem() {
+	local type="$1" pkg got meta purl pmd5 bin_arch
+
+	[ -z "$type" ] && type="$(uci -q get uuplugin.@uuplugin[0].oem_model)"
+	case "$type" in
+		""|auto|oem) type="$OEM_DEFAULT_MODEL" ;;
+	esac
+
+	mkdir -p "$OEM_DIR"
+
+	# 1. the OEM plugin itself. It comes first because its ELF header decides
+	#    everything else: on a router of the same architecture it simply runs,
+	#    and none of the emulation below is needed at all.
+	if [ ! -x "$OEM_DIR/uuplugin" ]; then
+		uu_log "Downloading the '$type' OEM build..."
+		meta=$(fetch_meta "${API}${type}")
+		purl=$(echo "$meta" | cut -d',' -f1)
+		pmd5=$(echo "$meta" | cut -d',' -f2)
+		case "$purl" in
+			http://*|https://*) ;;
+			*) uu_log "ERROR: no OEM build for model '$type'."; return 1 ;;
+		esac
+		fetch_file "$purl" /tmp/oem.tar.gz || { uu_log "ERROR: download failed."; return 1; }
+		got=$(md5sum /tmp/oem.tar.gz 2>/dev/null | awk '{print $1}')
+		if [ "$got" != "$pmd5" ]; then
+			uu_log "ERROR: OEM checksum mismatch."; rm -f /tmp/oem.tar.gz; return 1
+		fi
+		tar zxf /tmp/oem.tar.gz -C "$OEM_DIR" 2>/dev/null
+		rm -f /tmp/oem.tar.gz
+		chmod +x "$OEM_DIR/uuplugin" 2>/dev/null
+	fi
+	[ -x "$OEM_DIR/uuplugin" ] || {
+		uu_log "ERROR: $OEM_DIR/uuplugin is missing after download."; return 1; }
+
+	bin_arch="$(elf_arch "$OEM_DIR/uuplugin")"
+	if runs_natively "$bin_arch"; then
+		OEM_MODE="native"
+		restore_guardian
+		uu_log "Plugin build: $type OEM ($bin_arch, native)."
+		return 0
+	fi
+
+	# Emulation is wired up for one combination only - an aarch64 build on an
+	# x86_64 router - because that is what the bundled qemu covers.
+	if [ "$bin_arch" != "aarch64" ] || [ "$(detect_arch)" != "x86_64" ]; then
+		uu_log "ERROR: the '$type' OEM build is ${bin_arch:-of an unknown architecture},"
+		uu_log "  which this $(uname -m) router can neither run nor emulate."
+		uu_log "  Pick a different OEM model, or a generic build (consoles only)."
+		return 1
+	fi
+	OEM_MODE="emulated"
+	mkdir -p "$OEM_SYSROOT"
+
+	# 2. static qemu user-mode emulator
+	if [ -x "$QEMU" ]; then
+		got=$(sha256sum "$QEMU" 2>/dev/null | awk '{print $1}')
+		[ "$got" = "$QEMU_SHA256" ] || { uu_log "qemu checksum mismatch, refetching."; rm -f "$QEMU"; }
+	fi
+	if [ ! -x "$QEMU" ]; then
+		uu_log "Downloading qemu-aarch64-static (10 MB)..."
+		fetch_file "$QEMU_URL" "$QEMU" || { uu_log "ERROR: could not download qemu."; return 1; }
+		got=$(sha256sum "$QEMU" 2>/dev/null | awk '{print $1}')
+		if [ "$got" != "$QEMU_SHA256" ]; then
+			uu_log "ERROR: qemu checksum mismatch (expected $QEMU_SHA256, got $got)."
+			rm -f "$QEMU"
+			return 1
+		fi
+		chmod +x "$QEMU"
+	fi
+
+	# 3. aarch64 musl sysroot, from OpenWrt's own packages so loader, libgcc and
+	#    libstdc++ all come from one toolchain. The OEM binary wants the
+	#    pre-C++11 std::string ABI, which this libstdc++ still exports.
+	if [ ! -e "$OEM_SYSROOT/lib/ld-musl-aarch64.so.1" ]; then
+		uu_log "Building aarch64 sysroot..."
+		for pkg in $OEM_LIBS; do
+			fetch_file "$OEM_LIB_BASE/$pkg" "/tmp/$pkg" || {
+				uu_log "ERROR: could not download $pkg"; return 1; }
+			rm -rf /tmp/oemx && mkdir -p /tmp/oemx
+			tar xzf "/tmp/$pkg" -C /tmp/oemx 2>/dev/null
+			tar xzf /tmp/oemx/data.tar.gz -C "$OEM_SYSROOT" 2>/dev/null
+			rm -f "/tmp/$pkg"
+		done
+		rm -rf /tmp/oemx
+		[ -e "$OEM_SYSROOT/lib/libc.so" ] || \
+			ln -sf ld-musl-aarch64.so.1 "$OEM_SYSROOT/lib/libc.so"
+	fi
+
+	# 4. guardian shim. uuplugin execs its watchdog, and with no binfmt_misc in
+	#    the kernel nothing would re-invoke qemu for an aarch64 binary - the
+	#    exec just fails. A native /bin/sh wrapper does that job instead.
+	if [ -f "$OEM_DIR/xuplugin-guardian" ] && [ ! -f "$OEM_DIR/xuplugin-guardian.real" ]; then
+		mv "$OEM_DIR/xuplugin-guardian" "$OEM_DIR/xuplugin-guardian.real"
+	fi
+	if [ ! -f "$OEM_DIR/xuplugin-guardian" ] || ! grep -q qemu "$OEM_DIR/xuplugin-guardian" 2>/dev/null; then
+		cat > "$OEM_DIR/xuplugin-guardian" <<-SHIM
+		#!/bin/sh
+		# Same reason as the service command: an x86_64 LD_PRELOAD must not
+		# follow us into the emulated process.
+		unset LD_PRELOAD
+		exec "$QEMU" -L "$OEM_SYSROOT" "$OEM_DIR/xuplugin-guardian.real" "\$@"
+		SHIM
+		chmod +x "$OEM_DIR/xuplugin-guardian"
+	fi
+
+	uu_log "Plugin build: $type OEM (aarch64, emulated on $(uname -m))."
+	return 0
+}
+
+# The OEM build expects the identity file its vendor firmware would provide.
+write_oem_identity() {
+	local model sn
+	model="$(uci -q get uuplugin.@uuplugin[0].model)"
+	[ -z "$model" ] && model="OpenWrt"
+	sn=$(ip addr show br-lan 2>/dev/null | grep "link/ether" | awk '{print $2}')
+	mkdir -p "$RUN_DIR"
+	{
+		echo "productname=$model"
+		echo "ethaddr=$sn"
+		echo "hardversion=VER.A"
+		echo "bootversion=100"
+		echo "manucode=$sn"
+	} > "$RUN_DIR/h3c_info"
+}
+
+# ---------------------------------------------------------------- firewall
 
 get_uu_fw_zone() {
 	local cfg="$1"
-
 	[ "$(uci -q get firewall.$cfg.name)" = "UU" ] || return
-	[ "$(uci -q get firewall.$cfg.device)" = "tun16+" ] || return
-	[ "$(uci -q get firewall.$cfg.ifname)" = "tun16+" ] || return
 	echo "$cfg"
 }
 
 get_uu_fw_forwarding() {
 	local cfg="$1"
-
 	[ "$(uci -q get firewall.$cfg.src)" = "lan" ] || return
 	[ "$(uci -q get firewall.$cfg.dest)" = "UU" ] || return
 	echo "$cfg"
@@ -36,198 +389,413 @@ get_uu_fw_forwarding() {
 
 add_firewall_rule() {
 	local addfw zone forwarding
-
 	addfw="$(uci -q get uuplugin.@uuplugin[0].addfw)"
 	[ -z "$addfw" ] && addfw=0
-	if [ "$addfw" -eq "1" ] ; then
-		zone="$(config_foreach get_uu_fw_zone zone)"
-		forwarding="$(config_foreach get_uu_fw_forwarding forwarding)"
+	[ "$addfw" = "1" ] || return 0
 
-		if [ -n "$zone" ] && [ -n "$forwarding" ] ; then
-			echo "UU防火墙放行规则已存在，跳过添加。"
-			return
-		fi
+	config_load firewall
+	zone="$(config_foreach get_uu_fw_zone zone)"
+	forwarding="$(config_foreach get_uu_fw_forwarding forwarding)"
 
-		echo "自动添加UU防火墙放行规则..."
-		if [ -z "$zone" ] ; then
-			uci add firewall zone
-			uci set firewall.@zone[-1].name='UU'
-			uci set firewall.@zone[-1].input='ACCEPT'
-			uci set firewall.@zone[-1].output='ACCEPT'
-			uci set firewall.@zone[-1].forward='ACCEPT'
-			uci set firewall.@zone[-1].device='tun16+'
-			uci set firewall.@zone[-1].ifname='tun16+'
-			# IP 动态伪装 （UU 这类 TUN 加速通常不需要 NAT，保留源地址更合适。）
-			# uci set firewall.@zone[-1].masq='1'
-			# TCP MSS 钳制 （自动降低 TCP 连接的 MSS，避免经过 VPN/TUN 等隧道后因 MTU 变小导致 TCP 分片、丢包或网页卡顿，只影响 TCP，不优化 UDP 游戏流量。）
-			# uci set firewall.@zone[-1].mtu_fix='1'
-		else
-			echo "UU防火墙区域已存在，跳过添加。"
-		fi
+	if [ -n "$zone" ] && [ -n "$forwarding" ]; then
+		uu_log "Firewall: UU zone and forwarding already present."
+		return 0
+	fi
 
-		if [ -z "$forwarding" ] ; then
-			uci add firewall forwarding
-			uci set firewall.@forwarding[-1].src='lan'
-			uci set firewall.@forwarding[-1].dest='UU'
-		else
-			echo "UU防火墙转发规则已存在，跳过添加。"
-		fi
+	uu_log "Firewall: adding the UU accept zone..."
+	if [ -z "$zone" ]; then
+		uci add firewall zone >/dev/null
+		uci set firewall.@zone[-1].name='UU'
+		uci set firewall.@zone[-1].input='ACCEPT'
+		uci set firewall.@zone[-1].output='ACCEPT'
+		uci set firewall.@zone[-1].forward='ACCEPT'
+		uci set firewall.@zone[-1].device='tun16+'
+		uci set firewall.@zone[-1].ifname='tun16+'
+	fi
+	if [ -z "$forwarding" ]; then
+		uci add firewall forwarding >/dev/null
+		uci set firewall.@forwarding[-1].src='lan'
+		uci set firewall.@forwarding[-1].dest='UU'
+	fi
 
-		if [ -n "$(uci changes firewall)" ] ; then
-			echo "添加成功，开始重载防火墙..."
-			uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1
-		fi
+	if [ -n "$(uci changes firewall)" ]; then
+		uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1
+		uu_log "Firewall: rules applied."
 	fi
 }
 
 del_firewall_rule() {
-	local zone forwarding deleted
-
+	local zone forwarding deleted=0
 	config_load firewall
-	deleted=0
-
 	for forwarding in $(config_foreach get_uu_fw_forwarding forwarding); do
-		uci delete firewall.$forwarding
-		echo "已删除UU防火墙转发规则。"
-		deleted=1
+		uci -q delete firewall.$forwarding && deleted=1
 	done
-
 	for zone in $(config_foreach get_uu_fw_zone zone); do
-		uci delete firewall.$zone
-		echo "已删除UU防火墙区域。"
-		deleted=1
+		uci -q delete firewall.$zone && deleted=1
 	done
-
-	if [ "$deleted" -eq "0" ] ; then
-		echo "UU防火墙放行规则不存在，跳过删除。"
-		return
-	fi
-
-	if [ -n "$(uci changes firewall)" ] ; then
-		echo "删除成功，开始重载防火墙..."
+	[ "$deleted" = "1" ] || return 0
+	if [ -n "$(uci changes firewall)" ]; then
 		uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1
+		uu_log "Firewall: UU rules removed."
 	fi
 }
 
+# ---------------------------------------------------------------- service
+
+start_openclash_sync() {
+	local mode
+	mode="$(uci -q get uuplugin.@uuplugin[0].openclash_mode)"
+	[ -z "$mode" ] && mode="cooperative"
+	[ "$mode" = "off" ] && return 0
+	[ -x "$SYNC" ] || return 0
+	if [ ! -f /etc/config/openclash ]; then
+		uu_log "OpenClash is not installed; skipping integration."
+		return 0
+	fi
+
+	uu_log "OpenClash integration mode: $mode"
+	procd_open_instance uu_openclash_sync
+	procd_set_param command "$SYNC" "$mode"
+	procd_set_param respawn
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
 start_service() {
-	echo "经测试：此定制版UU加速器在FW3 iptables环境和FW4 nftables环境里加速都有效！"
-	echo "有问题可前往 https://github.com/lmq8267/luci-app-uugamebooster/issues 反馈。"
-        config_load "$CONF"
-	local enabled 
-	#config_get_bool enabled "$CONF" "enabled" "0"
+	local enabled arch type oem=0
+
+	config_load "$CONF"
 	enabled="$(uci -q get uuplugin.@uuplugin[0].enabled)"
-	echo "UU=$enabled"
 	[ -z "$enabled" ] && enabled=0
-	[ "$enabled" -eq "1" ] || return 1
-	echo "start..."
-	cputype=$(uname -ms | tr ' ' '_' | tr '[A-Z]' '[a-z]')
-	[ -n "$(echo $cputype | grep -E "linux.*armv.*")" ] && cpucore="arm"
-	[ -n "$(echo $cputype | grep -E "linux.*aarch64.*|linux.*armv8.*")" ] && cpucore="aarch64"
-	if [ -n "$(echo $cputype | grep -E "linux.*mips.*")" ] ; then
-           mipstype=$(echo -n I | hexdump -o 2>/dev/null | awk '{ print substr($2,6,1); exit}')
-           [ "$mipstype" != "0" ] && cpucore="mipsel"
-        fi
-	if [ -z "$cpucore" ]; then
-          echo "当前架构不符合，无法安装！此luci-app-uugamebooster安装包仅支持arm aarch64 mipsel架构！"
-          uci -q set uuplugin.@uuplugin[0].enabled=0
-          exit 1
-        fi
-        local model
-	#config_get model "uuplugin" "model" "OpenWrt"
-	model="$(uci -q get uuplugin.@uuplugin[0].model)"
-	echo "model=$model"
-	[ -z "$model" ] && model="OpenWrt"
-	mkdir -p /var/tmp/uu
-	if [ "$cpucore" = "mipsel" ]; then
-		# jd系列需要haiapi
-		echo "部署京东定制版UU运行环境..."
-		echo "#!/bin/sh" > $UU_SN
-		echo "echo '{\"result\": [ {\"data\": { \"mac\": \"$SN\", \"model\": \"$model\" }, \"code\": \"0x0\" } ] }'" >> $UU_SN
-		[ ! -L /usr/bin/haiapi ] && ln -sf $UU_SN /usr/bin/haiapi
-		chmod u+x $UU_SN
-	else
-		echo "部署H3C定制版UU运行环境..."
-		echo "productname=$model" >$UU_INFO
-		echo "ethaddr=$SN" >>$UU_INFO
-		echo "hardversion=VER.A" >>$UU_INFO
-		echo "bootversion=100" >>$UU_INFO
-		echo "manucode=$SN" >>$UU_INFO
+	if [ "$enabled" != "1" ]; then
+		uu_log "UU Game Booster is disabled; not starting."
+		return 1
 	fi
-	if [ ! -e "$PROG" ] || [ ! -e "$UU_CONF" ] ; then
-	  echo "开始下载主程序..."
-	  local uuurl=""
-	  case "$cpucore" in
-	    arm)
-	      uuurl="$armuurl"
-	      ;;
-	    aarch64)
-	      uuurl="$aarch64uurl"
-	      ;;
-	    mipsel)
-	      uuurl="$mipseluurl"
-	      ;;
-	    *)
-	      echo "不支持的架构: $cpucore"
-	      return 1
-	      ;;
-	  esac
-	  UU_url=$(curl -L -s -k -H "Accept:text/plain" "$uuurl" | wget --header=Accept:text/plain -q --no-check-certificate -O - "$uuurl" | curl -s -k -H "Accept:text/plain" "$uuurl")
-	  if [ -z "$UU_url" ]; then
-	    case "$cpucore" in
-	      arm)
-	        UU_url="http://uu.gdl.netease.com/uuplugin/h3c-bx54/v6.3.12/uu.tar.gz,56c6a0a5ed99c05d933091fc0b1c7d8c"
-	        ;;
-	      aarch64)
-	        UU_url="http://uu.gdl.netease.com/uuplugin/h3c-nx30pro/v6.3.12/uu.tar.gz,059dda9bf2803fe3f32b1d48e6b5c6d3"
-	        ;;
-	      mipsel)
-	        UU_url="http://uu.gdl.netease.com/uuplugin/jd-hr06/v6.3.10/uu.tar.gz,b4535b953b982bd8909d83da719e21b1"
-	        ;;
-	    esac
-	  fi
-	  plugin_url=$(echo "$UU_url" | cut  -d ',' -f 1)
-	  plugin_md5=$(echo "$UU_url" | cut  -d ',' -f 2)
-	  echo "下载$plugin_url 到/tmp/uu.tar.gz"
-	  curl -L -s -k "$plugin_url" -o /tmp/uu.tar.gz >/dev/null 2>&1 || wget -q --no-check-certificate "$plugin_url" -O /tmp/uu.tar.gz >/dev/null 2>&1 || curl -s -k "$plugin_url" -o /tmp/uu.tar.gz >/dev/null 2>&1 
-	  download_md5=$(md5sum /tmp/uu.tar.gz | awk '{print $1}')
-	  if [ "$download_md5" != "$plugin_md5" ];then
-            echo "下载的/tmp/uu.tar.gz不完整！"
-            rm -rf /tmp/uu.tar.gz
-            return 1
-          else
-            echo "下载完成，开始解压到$PROG"
-            tar zxf /tmp/uu.tar.gz -C /var/tmp/uu
-          fi
-	  
+
+	arch="$(uci -q get uuplugin.@uuplugin[0].arch)"
+
+	# "oem" selects the vendor build, the only way to get PC and phone boosting;
+	# the generic builds do consoles only. Which model, and whether it can run
+	# here at all, is decided in prepare_oem from the ELF header of the binary
+	# that actually arrives - natively where the architecture matches, under
+	# emulation on x86_64.
+	case "$arch" in
+		oem)
+			oem=1
+			type=""
+			;;
+		*)
+			if [ -z "$arch" ] || [ "$arch" = "auto" ]; then
+				# An explicit override exists for the case where detection is
+				# wrong; otherwise go by what the kernel reports.
+				arch="$(uci -q get uuplugin.@uuplugin[0].arch_force)"
+				[ -z "$arch" ] && arch="$(detect_arch)"
+			fi
+			if [ -z "$arch" ]; then
+				uu_log "ERROR: unsupported CPU architecture '$(uname -m)'."
+				uu_log "Supported: x86_64, aarch64, arm, mipsel, mipseb."
+				return 1
+			fi
+			type="openwrt-$arch"
+			uu_log "Plugin build: $(uname -m) -> $type"
+			;;
+	esac
+
+	# Refuse rather than fight another UU install for /var/run/uuplugin.pid.
+	# Without this procd simply respawns into a crash loop.
+	if [ -x "$DETECT" ]; then
+		local foreign
+		foreign=$(RUN_DIR="$RUN_DIR" "$DETECT" | sed -n 's/^foreign=//p')
+		if [ -n "$foreign" ]; then
+			uu_log "ERROR: another UU installation is already running:"
+			uu_log "  $foreign"
+			uu_log "It owns /var/run/uuplugin.pid, so this service cannot start."
+			uu_log "That is NetEase's official script install. To hand over to this plugin:"
+			uu_log "  /etc/init.d/uuplugin takeover"
+			uu_log "Then start this service again. To keep the official install instead,"
+			uu_log "leave this service disabled."
+			return 1
+		fi
 	fi
-	chmod u+x $PROG
-	[ "$cpucore" = "mipsel" ] && chmod u+x /usr/bin/haiapi 2>/dev/null
-        uu_ver=$($PROG -v | awk -F 'version:' '{print $2}' | tr -d ' \n')
-        echo "开始启动 ${PROG}-${uu_ver}"
+
+	if [ "$oem" = "1" ]; then
+		prepare_oem "$type" || return 1
+		write_oem_identity
+	elif [ ! -x "$PROG" ] || [ ! -e "$UU_CONF" ]; then
+		download_plugin "$type" || return 1
+	fi
+	[ "$oem" = "1" ] || chmod +x "$PROG" 2>/dev/null
+
+	if [ ! -e /dev/net/tun ]; then
+		uu_log "WARNING: /dev/net/tun is missing. Install kmod-tun or UU cannot build its tunnel."
+	fi
+
+	# What the plugin is allowed to see. UU enumerates the LAN from the DHCP
+	# leases, the ARP table and the IPv6 neighbour table, and reports it
+	# upstream, which is why the phone app otherwise lists every host on the
+	# network. The paths are fixed in the binary, so they have to be narrowed
+	# from the outside, and the two kinds of source need different handling:
+	#
+	#   - the plain files get a private mount namespace with the filtered
+	#     copies bind-mounted over them;
+	#   - /proc/net/arp cannot be mounted over at all, and "ip -6 neigh show"
+	#     is a command rather than a file, so an LD_PRELOAD shim redirects the
+	#     plugin's own calls instead (see src/uu-view-preload.c).
+	local inner mounts="" shim="" src dst dmode
+	dmode="$(uci -q get uuplugin.@uuplugin[0].device_mode)"
+	if [ -n "$dmode" ] && [ "$dmode" != "all" ] && [ -x "$VIEW" ]; then
+		"$VIEW" refresh
+		if command -v unshare >/dev/null 2>&1; then
+			while read -r src dst; do
+				[ -n "$src" ] && mounts="$mounts mount --bind '$src' '$dst'; "
+			done <<-EOF
+			$("$VIEW" paths)
+			EOF
+		fi
+		local bin
+		if [ "$oem" = "1" ]; then
+			bin="$OEM_DIR/uuplugin"
+			if [ "$OEM_MODE" = "emulated" ]; then
+				shim="$(preload_for aarch64)"
+			else
+				shim="$(preload_for "$(detect_arch)")"
+			fi
+		else
+			bin="$PROG"
+			shim="$(preload_for "$arch")"
+		fi
+		if [ ! -f "$shim" ]; then
+			uu_log "WARNING: $shim is missing, so the ARP table cannot be filtered."
+			shim=""
+		elif ! is_dynamic "$bin"; then
+			uu_log "WARNING: $bin is statically linked, so LD_PRELOAD cannot reach it"
+			uu_log "  and the ARP table cannot be filtered. Leases are still filtered."
+			shim=""
+		fi
+		[ -n "$mounts$shim" ] && \
+			uu_log "Device list: the plugin will only see the filtered device view."
+	fi
+
 	procd_open_instance uuplugin
+	if [ "$oem" = "1" ] && [ "$OEM_MODE" = "emulated" ]; then
+		uu_log "Starting $OEM_DIR/uuplugin under emulation"
+		# procd sets LD_PRELOAD=/lib/libsetlbf.so for line-buffered logging.
+		# That is an x86_64 library, and the emulated aarch64 loader inherits
+		# the variable and dies on it ("unsupported relocation type"). Clear it
+		# before handing over to qemu. Our own shim is aarch64 too, so it goes
+		# in through qemu's -E, which sets it inside the emulated process only
+		# and keeps it out of qemu's own environment.
+		inner="unset LD_PRELOAD; exec '$QEMU' -L '$OEM_SYSROOT'"
+		[ -n "$shim" ] && inner="$inner -E LD_PRELOAD='$shim'"
+		inner="$inner '$OEM_DIR/uuplugin' '$OEM_DIR/uu.conf'"
+	elif [ "$oem" = "1" ]; then
+		uu_log "Starting $OEM_DIR/uuplugin"
+		inner="exec '$OEM_DIR/uuplugin' '$OEM_DIR/uu.conf'"
+		[ -n "$shim" ] && inner="$(with_preload "$shim") $inner"
+	else
+		uu_log "Starting $PROG"
+		inner="exec '$PROG' '$UU_CONF'"
+		[ -n "$shim" ] && inner="$(with_preload "$shim") $inner"
+	fi
 
-	procd_set_param command "$PROG" "$UU_CONF"
-
+	if [ -n "$mounts" ]; then
+		procd_set_param command unshare -m /bin/sh -c "$mounts $inner"
+	else
+		procd_set_param command /bin/sh -c "$inner"
+	fi
 	procd_set_param limits core="unlimited"
 	procd_set_param respawn
 	procd_set_param stdout 1
 	procd_set_param stderr 1
-
 	procd_close_instance
-	config_load firewall
+
+	# Leases and neighbours change as devices come and go, so the filtered view
+	# has to be rewritten - in place, since a bind mount follows the inode.
+	if [ -n "$mounts$shim" ]; then
+		procd_open_instance uu_view
+		procd_set_param command "$VIEW" watch
+		procd_set_param respawn
+		procd_close_instance
+	fi
+
 	add_firewall_rule
-	echo "done"
+	start_openclash_sync
+	uu_log "Started. Bind this router in the UU console-booster app to begin."
 }
 
 stop_service() {
+	[ -x "$SYNC" ] && "$SYNC" cleanup >/dev/null 2>&1
+
+	# Only tear the firewall zone down when the service is actually being
+	# turned off. Doing it on every stop meant a restart removed and re-added
+	# the zone, and each of those reloads fw4 - which discards the chains
+	# OpenClash adds at runtime. A service that restarts a few times therefore
+	# took the whole network down with it, because OpenClash's ip rule survives
+	# the reload while the rules it depends on do not.
+	#
+	# The zone is inert when UU is not running: it only matches tun16+, which
+	# does not exist then.
+	local enabled
+	enabled="$(uci -q get uuplugin.@uuplugin[0].enabled)"
+	if [ "$enabled" = "1" ]; then
+		uu_log "Restart: leaving the UU firewall zone in place."
+		return 0
+	fi
 	del_firewall_rule
 }
 
 reload_service() {
-	stop
-	start
+	# A plain "start" lets procd diff the instances and restart only those whose
+	# definition actually changed, so turning coexistence or the device list on
+	# leaves an active boost - and its registration - alone.
+	#
+	# Switching the service off is different: the OpenClash exemptions and the
+	# firewall zone have to come back out, and only stop_service does that.
+	if [ "$(uci -q get uuplugin.@uuplugin[0].enabled)" = "1" ]; then
+		start
+	else
+		stop
+	fi
 }
 
 service_triggers() {
 	procd_add_reload_trigger uuplugin
+}
+
+# ------------------------------------------------------------ legacy config
+
+# Firewall rule sections pinned to a UU tunnel device. NetEase's per-interface
+# instructions have you add three of these per boosted device, by hand. The UU
+# zone this plugin creates uses the tun16+ wildcard, which covers tun163,
+# tun164 and everything after, so the hand-written ones are redundant.
+legacy_fw_rules() {
+	local n dev
+	[ -n "$(config_foreach get_uu_fw_zone zone)" ] || return 0
+	for n in $(uci show firewall 2>/dev/null | sed -n 's/^firewall\.@rule\[\([0-9]*\)\]=rule$/\1/p'); do
+		dev="$(uci -q get firewall.@rule[$n].device)"
+		case "$dev" in
+			tun16*) echo "$n" ;;
+		esac
+	done
+}
+
+# Report redundant leftovers from a manual UU setup. Removes nothing unless
+# called as "cleanup_legacy apply" - this is the user's own configuration.
+#
+# Scope is deliberately limited to firewall rules. OpenClash's access-control
+# lists are left alone: UU address ranges parked there are harmless, and they
+# stay useful for any other UU client on the LAN that this plugin knows nothing
+# about.
+cleanup_legacy() {
+	local apply="$1" n rules
+
+	config_load firewall
+	rules="$(legacy_fw_rules)"
+
+	if [ -z "$rules" ]; then
+		uu_log "No redundant UU firewall rules found."
+		return 0
+	fi
+
+	uu_log "Redundant firewall rules (superseded by the UU tun16+ zone):"
+	for n in $rules; do
+		uu_log "  firewall.@rule[$n] $(uci -q get firewall.@rule[$n].name) -> $(uci -q get firewall.@rule[$n].device)"
+	done
+
+	if [ "$apply" != "apply" ]; then
+		uu_log ""
+		uu_log "Nothing changed. Re-run as '/etc/init.d/uuplugin cleanup_legacy apply' to remove these."
+		return 0
+	fi
+
+	# Highest index first: deleting a section renumbers the ones after it.
+	for n in $(echo "$rules" | sort -rn); do
+		uci -q delete firewall.@rule[$n] && uu_log "Deleted firewall.@rule[$n]."
+	done
+
+	if [ -n "$(uci changes firewall)" ]; then
+		uci commit firewall && /etc/init.d/firewall reload >/dev/null 2>&1
+		uu_log "Firewall reloaded. Cleanup complete."
+	fi
+}
+
+# ---------------------------------------------------------------- takeover
+
+# Remove a UU install created by NetEase's official script, so this service can
+# own /var/run/uuplugin.pid.
+#
+# Deliberately does not use pkill: busybox's "pkill -x uuplugin" matches nothing
+# even when a process is named exactly that, and "pkill -f uuplugin_monitor.sh"
+# would match the very shell running the command. Walking /proc and killing by
+# PID is unambiguous.
+# PIDs of uuplugin binaries that are not ours. The */uuplugin test is load
+# bearing: pgrep matches on process name, and an rc.common init script carries
+# its own script name as comm, so this very process shows up in the list.
+foreign_uu_pids() {
+	local pid exe ours
+	ours="$(readlink -f "$PROG" 2>/dev/null)"
+	for pid in $(pgrep uuplugin 2>/dev/null); do
+		[ "$pid" = "$$" ] && continue
+		# Plain readlink: a deleted-but-running binary reads as "<path> (deleted)".
+		exe="$(readlink "/proc/$pid/exe" 2>/dev/null)"
+		exe="${exe% (deleted)}"
+		case "$exe" in
+			*/uuplugin) ;;
+			*) continue ;;
+		esac
+		[ -n "$ours" ] && [ "$exe" = "$ours" ] && continue
+		echo "$pid"
+	done
+}
+
+takeover() {
+	local pid cmd found=0
+
+	# The watchdog first - it respawns the binary if the binary goes first.
+	for pid in $(ls -1 /proc 2>/dev/null | grep -E '^[0-9]+$'); do
+		# Processes come and go while we walk /proc. Read via cat so a PID that
+		# disappears in between is a silent miss, not a shell redirection error
+		# ("< file" fails before a trailing 2>/dev/null can apply).
+		[ -r "/proc/$pid/cmdline" ] || continue
+		cmd="$(cat "/proc/$pid/cmdline" 2>/dev/null | tr '\0' ' ')"
+		case "$cmd" in
+			*uuplugin_monitor.sh*)
+				kill "$pid" 2>/dev/null && {
+					uu_log "Stopped the official watchdog (pid $pid)."
+					found=1
+				}
+				;;
+		esac
+	done
+	[ "$found" = "1" ] && sleep 1
+
+	# NOTE: an rc.common init script runs with comm set to the script's own name,
+	# so "pgrep uuplugin" matches THIS process too. Without the */uuplugin guard
+	# below, takeover kills itself (exit 143).
+	for pid in $(foreign_uu_pids); do
+		kill "$pid" 2>/dev/null && {
+			uu_log "Stopped foreign uuplugin (pid $pid)."
+			found=1
+		}
+	done
+	[ "$found" = "1" ] && sleep 2
+
+	# Anything still alive after a polite TERM.
+	for pid in $(foreign_uu_pids); do
+		kill -9 "$pid" 2>/dev/null && uu_log "Force-killed pid $pid."
+	done
+
+	if [ -d /usr/sbin/uu ] || [ -d /tmp/uu ] || [ -e /etc/rc.d/S99uuplugin ]; then
+		rm -rf /usr/sbin/uu /tmp/uu /etc/rc.d/S99uuplugin
+		rm -f /var/run/uuplugin.pid
+		uu_log "Removed /usr/sbin/uu, /tmp/uu and the S99 boot hook."
+		found=1
+	fi
+
+	if [ "$found" = "1" ]; then
+		uu_log "Takeover complete. Enable this service and start it."
+	else
+		uu_log "No other UU installation found - nothing to take over."
+	fi
 }

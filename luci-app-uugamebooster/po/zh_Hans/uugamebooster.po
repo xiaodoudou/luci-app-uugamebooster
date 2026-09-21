@@ -1,0 +1,269 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_Hans\n"
+"Project-Id-Version: luci-app-uugamebooster\n"
+
+msgid "UU Game Booster"
+msgstr "UU 游戏加速器"
+
+msgid "Runs NetEase's UU game accelerator on this router. See the <strong>How to use</strong> tab to get started."
+msgstr "在本路由器上运行网易 UU 游戏加速器。请先查看<strong>使用方法</strong>选项卡。"
+
+msgid "General"
+msgstr "基本设置"
+
+msgid "What to boost"
+msgstr "加速对象"
+
+msgid "OpenClash"
+msgstr "OpenClash"
+
+msgid "Device visibility"
+msgstr "设备可见性"
+
+msgid "How to use"
+msgstr "使用方法"
+
+msgid "Enable"
+msgstr "启用"
+
+msgid "Router name"
+msgstr "路由器名称"
+
+msgid "Shown in the UU app, so you can tell routers apart. Changing it after binding means unbinding and binding again."
+msgstr "显示在 UU App 中，便于区分不同路由器。绑定后再修改需要先解绑再重新绑定。"
+
+msgid "Open the firewall for UU's tunnel"
+msgstr "为 UU 隧道开放防火墙"
+
+msgid "Adds a firewall zone for UU's tunnel (tun16+) and lets the LAN forward into it. Required on OpenWrt 22.03 and newer, where forwarding is rejected by default - without it nothing can be boosted."
+msgstr "为 UU 隧道（tun16+）添加防火墙区域，并允许局域网转发至该区域。OpenWrt 22.03 及更高版本默认拒绝转发，因此必须开启，否则无法加速任何设备。"
+
+msgid "Plugin build"
+msgstr "插件版本"
+
+msgid "Game consoles only (recommended)"
+msgstr "仅游戏主机（推荐）"
+
+msgid "Game consoles, PCs and phones"
+msgstr "游戏主机、电脑和手机"
+
+msgid "NetEase ships PC and phone boosting only in the builds it makes for router vendors, which identify themselves to its servers as H3C hardware. Ask for those and the plugin fetches one and works out how to run it:<br />&#8226; on an ARM router it runs directly;<br />&#8226; on x86_64 it runs under emulation - everything needed is bundled, only the plugin itself is downloaded, and CPU use is a little higher.<br />The console-only builds are NetEase's plain OpenWrt ones. They are leaner, but the app will not offer your PC or phone."
+msgstr "网易仅在面向路由器厂商发布的版本中提供电脑和手机加速，这些版本会向服务器声明自己是 H3C 硬件。选择该项后，插件会自动下载并决定如何运行：<br />&#8226; ARM 路由器上直接原生运行；<br />&#8226; x86_64 上通过模拟运行 —— 所需组件已随插件打包，只需下载插件本体，CPU 占用略有增加。<br />仅主机版本是网易的通用 OpenWrt 版本，体积更小，但 App 中不会出现你的电脑或手机。"
+
+msgid "Vendor model"
+msgstr "厂商型号"
+
+msgid "Which vendor build to ask NetEase for. Both behave the same; try the other one if a download fails."
+msgstr "向网易请求哪个厂商版本。两者功能相同，若下载失败可换另一个试试。"
+
+msgid "CPU architecture"
+msgstr "CPU 架构"
+
+msgid "Only needed if the automatic choice is wrong."
+msgstr "仅在自动识别有误时才需要设置。"
+
+msgid "Detect automatically"
+msgstr "自动识别"
+
+msgid "mipsel (little endian)"
+msgstr "mipsel（小端）"
+
+msgid "mipseb (big endian)"
+msgstr "mipseb（大端）"
+
+msgid "Coexistence"
+msgstr "共存方式"
+
+msgid "Split the traffic (recommended)"
+msgstr "分流（推荐）"
+
+msgid "Take whole devices off OpenClash"
+msgstr "让整台设备绕过 OpenClash"
+
+msgid "Leave OpenClash alone"
+msgstr "不改动 OpenClash"
+
+msgid "UU and OpenClash both intercept LAN traffic, so left alone one of them silently wins.<br /><br /><strong>Split the traffic</strong> lets each handle what it is for. Only what UU actually accelerates leaves OpenClash: the game servers UU routes into its tunnel, plus the UDP ports it marks - both read back from UU's own live rules, for boosted devices only. Everything else from that same device keeps going through OpenClash.<br /><em>So most of a boosted PC's traffic still going through OpenClash is the intended result, not a fault.</em><br /><br /><strong>Take whole devices off OpenClash</strong> is the blunt fallback: the devices you list stop using the proxy entirely while UU runs.<br /><strong>Leave OpenClash alone</strong> changes nothing - useful if you would rather tune OpenClash by hand."
+msgstr "UU 和 OpenClash 都会透明接管局域网流量，若不处理，只会有一方生效。<br /><br /><strong>分流</strong>让两者各司其职。只有 UU 真正加速的流量才会离开 OpenClash：UU 导入隧道的游戏服务器地址，以及它标记的 UDP 端口 —— 这两项都从 UU 的实时规则中读取，且仅对被加速的设备生效。同一台设备的其他流量仍然走 OpenClash。<br /><em>因此，被加速的电脑大部分流量依然经过 OpenClash，这是预期结果，并非故障。</em><br /><br /><strong>让整台设备绕过 OpenClash</strong> 是简单的备选方案：UU 运行期间，列出的设备完全不使用代理。<br /><strong>不改动 OpenClash</strong> 则什么都不做，适合你想手动调整 OpenClash 的情况。"
+
+msgid "Move devices off OpenClash's own bypass list"
+msgstr "将设备移出 OpenClash 自身的绕行列表"
+
+msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips). A boosted device on that list skips OpenClash for everything, so the split above can do nothing for it. Turn this on to let the plugin take such a device off OpenClash's list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's configuration."
+msgstr "OpenClash 维护着一份完全跳过代理的设备列表（lan_ac_black_ips）。被加速的设备若在该列表中，所有流量都会跳过 OpenClash，上面的分流便无法生效。开启后，插件会在设备被加速期间将其暂时移出该列表，之后再放回。默认关闭，因为这会修改并保存 OpenClash 的配置。"
+
+msgid "Devices to bypass - by MAC"
+msgstr "绕行设备 —— 按 MAC"
+
+msgid "These stop using OpenClash while UU is running."
+msgstr "UU 运行期间，这些设备不再使用 OpenClash。"
+
+msgid "Devices to bypass - by IP"
+msgstr "绕行设备 —— 按 IP"
+
+msgid "Addresses or CIDR ranges that stop using OpenClash while UU runs."
+msgstr "UU 运行期间不再使用 OpenClash 的地址或 CIDR 网段。"
+
+msgid "How often to re-check UU's routes"
+msgstr "重新检查 UU 路由的间隔"
+
+msgid "In seconds. UU adds and removes game routes as it goes."
+msgstr "单位为秒。UU 会在运行过程中不断增删游戏路由。"
+
+msgid "Widest route to divert"
+msgstr "允许分流的最大网段"
+
+msgid "A safety limit, as a prefix length: never send a route broader than this around OpenClash. Stops one stray default route from pulling the whole internet out of the proxy."
+msgstr "以前缀长度表示的安全上限：比该值更宽的路由绝不绕过 OpenClash。可避免一条异常的默认路由把整个互联网都带离代理。"
+
+msgid "Devices UU is allowed to see"
+msgstr "允许 UU 看到的设备"
+
+msgid "Every device on the network"
+msgstr "网络中的所有设备"
+
+msgid "Everything except the devices below"
+msgstr "除下列设备之外的全部设备"
+
+msgid "Only the devices below"
+msgstr "仅下列设备"
+
+msgid "The UU app lists whatever the plugin finds on your network, which by default is everything. This narrows what it can find at all, so a device left out never appears in the app, is never offered for boosting, and is never reported to NetEase.<br />Nothing else on the router is affected: the real DHCP leases and ARP table are untouched, and no traffic is blocked."
+msgstr "UU App 会列出插件在你网络中发现的所有设备，默认是全部。此设置直接限制插件能发现的范围：未列入的设备不会出现在 App 中，不会被提供加速，也不会上报给网易。<br />路由器的其他部分不受影响：真实的 DHCP 租约和 ARP 表保持原样，也不会拦截任何流量。"
+
+msgid "By IP address"
+msgstr "按 IP 地址"
+
+msgid "By MAC address"
+msgstr "按 MAC 地址"
+
+msgid "Steadier than an IP for anything using DHCP. Resolved to whichever address the device currently holds."
+msgstr "对使用 DHCP 的设备而言比 IP 更稳定。会自动解析为设备当前持有的地址。"
+
+msgid "Steps"
+msgstr "步骤"
+
+msgid "Turn the service on under <strong>General</strong>, then Save &amp; Apply."
+msgstr "在<strong>基本设置</strong>中启用服务，然后保存并应用。"
+
+msgid "Wait for the panel above to reach <strong>Ready</strong>. Until then the app cannot find this router, even though the service is running."
+msgstr "等待上方面板显示<strong>就绪</strong>。在此之前，即使服务已在运行，App 也找不到这台路由器。"
+
+msgid "Install the UU app and sign in. A NetEase account is required."
+msgstr "安装 UU App 并登录。需要网易账号。"
+
+msgid "In the app, bind this router. It appears under the name set as <strong>Router name</strong>."
+msgstr "在 App 中绑定这台路由器。它会以<strong>路由器名称</strong>中设置的名字显示。"
+
+msgid "Pick the device to boost. Consoles are offered by default; for a PC or phone, set <strong>What to boost</strong> accordingly first."
+msgstr "选择要加速的设备。默认只提供游戏主机；若要加速电脑或手机，请先设置<strong>加速对象</strong>。"
+
+msgid "Get the app"
+msgstr "获取 App"
+
+msgid "Scan with your phone: iOS on the left, Android on the right."
+msgstr "用手机扫码：左侧为 iOS，右侧为 Android。"
+
+msgid "If a device is missing"
+msgstr "找不到某台设备"
+
+msgid "Check <strong>Device visibility</strong>. If it is set to a whitelist, the app only ever sees the devices listed there."
+msgstr "请检查<strong>设备可见性</strong>。若设为白名单，App 只能看到其中列出的设备。"
+
+msgid "Good to know"
+msgstr "须知"
+
+msgid "The UU app and its service are operated by NetEase and are aimed at users in mainland China."
+msgstr "UU App 及其服务由网易运营，主要面向中国大陆用户。"
+
+msgid "Boosting is not always on: traffic only takes UU's tunnel for a device you have picked in the app, and only for the game servers UU routes there."
+msgstr "加速并非始终生效：只有你在 App 中选中的设备、且目标为 UU 导入隧道的游戏服务器时，流量才会走 UU 隧道。"
+
+msgid "Ready"
+msgstr "就绪"
+
+msgid "Starting"
+msgstr "正在启动"
+
+msgid "no connection to NetEase yet"
+msgstr "尚未连接到网易"
+
+msgid "Registering"
+msgstr "正在注册"
+
+msgid "the app cannot find the router yet"
+msgstr "App 暂时还找不到这台路由器"
+
+msgid "Not running"
+msgstr "未运行"
+
+msgid "Service"
+msgstr "服务"
+
+msgid "Registration"
+msgstr "注册状态"
+
+msgid "not registered yet"
+msgstr "尚未注册"
+
+msgid "NetEase link"
+msgstr "网易连接"
+
+msgid "connecting"
+msgstr "正在连接"
+
+msgid "Conflicting UU installation"
+msgstr "检测到冲突的 UU 安装"
+
+msgid "It owns the PID file, so this service cannot start. Run"
+msgstr "它占用了 PID 文件，本服务无法启动。请运行"
+
+msgid "to hand over."
+msgstr "以接管。"
+
+msgid "vendor build, running natively - consoles, PCs and phones"
+msgstr "厂商版本，原生运行 —— 支持主机、电脑和手机"
+
+msgid "vendor build, emulated - consoles, PCs and phones"
+msgstr "厂商版本，模拟运行 —— 支持主机、电脑和手机"
+
+msgid "standard build - game consoles only"
+msgstr "通用版本 —— 仅支持游戏主机"
+
+msgid "Running"
+msgstr "运行中"
+
+msgid "Tunnel"
+msgstr "隧道"
+
+msgid "none yet"
+msgstr "暂无"
+
+msgid "Boosted devices"
+msgstr "已加速设备"
+
+msgid "none - boost a device in the UU app"
+msgstr "暂无 —— 请在 UU App 中选择要加速的设备"
+
+msgid "not installed"
+msgstr "未安装"
+
+msgid "installed, not running"
+msgstr "已安装，未运行"
+
+msgid "Exempted from proxy"
+msgstr "已排除代理"
+
+msgid "game destinations, for boosted devices only"
+msgstr "个游戏目标地址，仅对已加速设备生效"
+
+msgid "nothing - no device is being boosted"
+msgstr "无 —— 当前没有设备在加速"
+
+msgid "Status"
+msgstr "状态"
+
+msgid "Collecting data..."
+msgstr "正在获取数据…"

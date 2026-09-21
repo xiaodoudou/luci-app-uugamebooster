@@ -6,6 +6,9 @@ uci -q batch <<-EOF >/dev/null
 	set ucitrack.@uuplugin[-1].init=uuplugin
 	commit ucitrack
 EOF
+
 chmod +x /etc/init.d/uuplugin
+chmod +x /usr/libexec/uuplugin/* 2>/dev/null
+
 rm -f /tmp/luci-indexcache
 exit 0

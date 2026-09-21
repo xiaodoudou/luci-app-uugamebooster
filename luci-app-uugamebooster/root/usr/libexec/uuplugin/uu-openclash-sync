@@ -1,0 +1,538 @@
+#!/bin/sh
+# uu-openclash-sync - let UU and OpenClash share the same LAN.
+#
+# Usage: uu-openclash-sync <cooperative|bypass|cleanup>
+#
+# WHY THIS EXISTS
+# ---------------
+# UU and OpenClash both intercept LAN traffic transparently, so by default
+# whichever hooks netfilter first wins and the other silently does nothing.
+#
+# HOW UU ACTUALLY STEERS TRAFFIC
+# ------------------------------
+# Generic build, boosting a PS5 at 192.0.2.215:
+#
+#   ip rule  1886: from 192.0.2.215 lookup 179              (12k game prefixes)
+#   ip rule  1887: from 192.0.2.215 fwmark 0x163 lookup 163 (default via tun163)
+#   nft      table ip XU_ACC_DEVICE_192.0.2.215_mangle
+#              iifname br-lan ip saddr 192.0.2.215 udp dport 1025-65535
+#                meta mark set 0x163
+#
+# OEM build under emulation, boosting a PC at 192.0.2.128:
+#
+#   ip rule  1886: from 192.0.2.128 lookup 179              (154 game prefixes)
+#   ip rule  1887: from 192.0.2.128 fwmark 0x163 lookup 163 (default via tun163)
+#   nft      table ip mangle chain PREROUTING     (its own bundled iptables-nft)
+#              iifname br-lan ip saddr 192.0.2.128 udp dport 53 xt target "MARK"
+#              iifname br-lan ip saddr 192.0.2.128 return
+#
+# So UU is always scoped by SOURCE - the boosted device - and within that device
+# it takes a large list of destination prefixes plus some slice of UDP. But the
+# slice differs: the generic build claims the whole ephemeral range, the OEM
+# build claims only DNS. Neither is destination-only, and neither can be assumed.
+#
+# That rules out the obvious integration. OpenClash's wan_ac_black_ips is
+# destination-only and global, so mirroring UU's prefixes into it would make
+# every device on the LAN bypass the proxy for all of them.
+#
+# cooperative: give OpenClash a source+destination exemption instead. Rules at
+#              the top of its mangle chain return early for exactly "boosted
+#              device AND (UU destination OR the UDP UU marks OR UU's mark)",
+#              using two sets we own, with the UDP slice and the mark read back
+#              from UU's live rules rather than assumed. The boosted device's
+#              remaining traffic - store, streaming, browser - still goes
+#              through OpenClash.
+# bypass:      the blunt fallback - exclude whole devices via
+#              lan_ac_black_macs / lan_ac_black_ips.
+
+MODE="${1:-cooperative}"
+DETECT="/usr/libexec/uuplugin/uu-detect"
+STATE="/var/run/uu-openclash.state"
+SIG="/var/run/uu-openclash.sig"
+LANAC="/var/run/uu-openclash.lanac"
+SPECSTATE="/var/run/uu-openclash.spec"
+NFT_TMP="/tmp/.uu-coop.nft"
+
+SET_SRC="uu_boosted"
+SET_DST="uu_dests"
+TAG_DST="uu-coop-dest"
+TAG_UDP="uu-coop-udp"
+TAG_MARK="uu-coop-mark"
+
+# syslog gets the message with its real level. The copy for a human goes to
+# stderr, and only when there is a human: procd also forwards stderr to syslog,
+# so echoing unconditionally logged everything twice and relabelled every
+# informational line as an error. Never stdout - several helpers below are read
+# through command substitution, which would capture it as their return value.
+log() { logger -t uu-openclash -p daemon.info "$@"; [ -t 2 ] && echo "[uu-openclash] $@" >&2; return 0; }
+err() { logger -t uu-openclash -p daemon.err  "$@"; [ -t 2 ] && echo "[uu-openclash] $@" >&2; return 0; }
+
+uci_get() { uci -q get "uuplugin.@uuplugin[0].$1"; }
+
+# A bare "sleep" defers signal handling until it returns, so procd gives up
+# waiting and escalates to SIGKILL. Backgrounding it and waiting lets the
+# cleanup trap run immediately.
+nap() { sleep "$1" & wait $!; }
+
+INTERVAL="$(uci_get oc_interval)"; [ -z "$INTERVAL" ] && INTERVAL=5
+MINPFX="$(uci_get oc_min_prefix)";  [ -z "$MINPFX" ] && MINPFX=8
+TUNIF="$(uci_get oc_tun_iface)"
+
+# What UU claims from a boosted device is read back from the rules UU itself
+# installs, not assumed, because the slice differs by build. The generic build
+# marks the whole ephemeral UDP range; the OEM build under emulation marks only
+# DNS and leaves the rest to its destination-prefix route. Assuming the wide
+# range therefore pushed a boosted PC's UDP out of OpenClash while UU was not
+# accelerating any of it. Both can still be pinned in /etc/config/uuplugin if a
+# build turns out to do something new.
+UU_UDP_PORTS="$(uci_get oc_uu_udp_ports)"
+UU_MARK_CFG="$(uci_get oc_uu_mark)"
+
+# ------------------------------------------------------------------ discovery
+
+# Devices UU is currently boosting. UU creates a per-device nftables table for
+# each one, which names the device's IP - a more direct signal than guessing
+# from routes or leases.
+#
+# UU adds a policy routing rule per boosted device ("from <ip> lookup <table>")
+# pointing at a table that routes into its tunnel, and usually also an
+# XU_ACC_DEVICE_<ip> nftables table. The OEM build under emulation only manages
+# the first of those - it boosts correctly while creating no nft tables at all -
+# so the ip rule is the signal to trust, with the nft table as a supplement.
+boosted_ips() {
+	# Delegated to uu-detect so the status page and this daemon can never
+	# disagree about what counts as boosted - including the device
+	# black/whitelist, which is applied there.
+	"$DETECT" 2>/dev/null | sed -n 's/^boosted=//p' | tr ' ' '\n' | grep -v '^$'
+}
+
+# The UDP ports UU is actually marking for a device, read off the rules it just
+# installed. Two shapes exist in the wild, and both are matched here:
+#
+#   ip saddr <ip> udp dport 53             ... xt target "MARK"   (OEM, emulated)
+#   ip saddr <ip> udp dport 1025-65535     ... meta mark set 0x163 (generic)
+#
+# The OEM build uses its own bundled iptables-nft, so its rules land in the
+# legacy "ip mangle" table rather than in an XU_ACC_DEVICE_<ip> table. Read both.
+uu_marked_udp_ports() {
+	local ip="$1" t
+	{
+		nft list table ip mangle 2>/dev/null
+		for t in $(nft list tables 2>/dev/null |
+		           sed -n 's/^table ip \(XU_ACC_DEVICE_.*\)$/\1/p'); do
+			nft list table ip "$t" 2>/dev/null
+		done
+	} | awk -v ip="$ip" '
+		index($0, "ip saddr " ip) == 0 { next }
+		!/udp dport/                   { next }
+		!/mark set|xt target "MARK"/   { next }
+		{
+			sub(/.*udp dport /, "")
+			sub(/ (counter|meta|xt|comment|accept|return|jump|goto|drop).*/, "")
+			gsub(/[{}]/, "")
+			gsub(/^[ \t]+|[ \t]+$/, "")
+			# "{ 53, 1025-65535 }" is one rule but two ports; emit them
+			# separately so the caller can merge across devices.
+			n = split($0, part, /[ \t]*,[ \t]*/)
+			for (j = 1; j <= n; j++)
+				if (length(part[j])) print part[j]
+		}'
+}
+
+# The fwmark UU routes a device's traffic with, taken from its own ip rule
+# ("from <ip> fwmark 0x163/0x163 lookup 163"). Scoped to the device so
+# OpenClash's own mark, which sits in the same rule range, is never picked up.
+uu_marked_fwmark() {
+	local ip="$1"
+	ip rule show 2>/dev/null | awk -v ip="$ip" '
+		index($0, "from " ip) && /fwmark/ {
+			for (i = 1; i <= NF; i++)
+				if ($i == "fwmark") { split($(i + 1), a, "/"); print a[1]; exit }
+		}'
+}
+
+# Anything named utun belongs to OpenClash, so it is never a candidate.
+#
+# UU creates one TUN per boosted device - tun163 for the first, tun164 for the
+# second, and so on - so every tun16* has to be read, not just the first.
+find_tuns() {
+	local d devs found="" fallback=""
+	[ -n "$TUNIF" ] && { echo "$TUNIF"; return; }
+
+	devs=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d'@' -f1)
+	for d in $devs; do
+		case "$d" in
+			tun16*) found="$found $d" ;;
+		esac
+	done
+	[ -n "$found" ] && { echo $found; return; }
+
+	for d in $devs; do
+		case "$d" in
+			utun*) continue ;;
+			tun*)  fallback="$d"; break ;;
+		esac
+	done
+	[ -n "$fallback" ] && { echo "$fallback"; return; }
+	echo ""
+}
+
+# Destination prefixes UU routes into its tunnel, across every one of its TUNs.
+collect_prefixes() {
+	local dev p mask
+	for dev in "$@"; do
+		ip route show table all dev "$dev" 2>/dev/null | awk '{print $1}'
+	done | \
+	while read -r p; do
+		case "$p" in
+			default|0.0.0.0/0|"") continue ;;
+			*:*) continue ;;                 # IPv6 handled separately
+			*[!0-9./]*) continue ;;          # not a bare v4 prefix
+		esac
+		case "$p" in
+			*/*) mask="${p##*/}" ;;
+			*)   mask=32; p="$p/32" ;;
+		esac
+		# Guard: never exempt a route broad enough to pull the whole internet
+		# out of OpenClash.
+		[ "$mask" -lt "$MINPFX" ] && continue
+		echo "$p"
+	done | sort -u
+}
+
+# ------------------------------------------------------------------ nftables
+
+# OpenClash builds different chains depending on its mode: a nat "openclash"
+# chain when redirecting, "openclash_mangle" when using TPROXY. Act on whatever
+# is actually there.
+# Say it once rather than every poll while we wait for OpenClash.
+warn_once_chains() {
+	[ -f /var/run/uu-openclash.nochains ] && return
+	: > /var/run/uu-openclash.nochains
+	log "Waiting for OpenClash's fw4 chains to appear..."
+}
+
+oc_chains() {
+	local c
+	for c in openclash_mangle openclash; do
+		nft list chain inet fw4 "$c" >/dev/null 2>&1 && echo "$c"
+	done
+}
+
+ensure_sets() {
+	nft add set inet fw4 "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
+	nft add set inet fw4 "$SET_DST" '{ type ipv4_addr; flags interval; auto-merge; }' 2>/dev/null
+}
+
+# Insert the exemptions at the top of each OpenClash chain. Idempotent: the
+# rules carry a comment we can look for, so an OpenClash reload that wipes them
+# is repaired on the next pass without ever stacking duplicates.
+ensure_rules() {
+	local udp="$1" mark="$2" c added=0 spec prev
+
+	# What UU claims can change when a different device is boosted, or when the
+	# plugin is switched between the native and the emulated build. The old
+	# exemption no longer describes it then, so replace it rather than leave it
+	# beside the new one.
+	spec="$udp|$mark"
+	prev="$(cat "$SPECSTATE" 2>/dev/null)"
+	if [ "$spec" != "$prev" ]; then
+		[ -n "$prev" ] && del_tagged "$TAG_UDP" "$TAG_MARK"
+		printf '%s\n' "$spec" > "$SPECSTATE"
+	fi
+
+	for c in $(oc_chains); do
+		if ! nft list chain inet fw4 "$c" 2>/dev/null | grep -q "$TAG_DST"; then
+			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC ip daddr @$SET_DST \
+				counter return comment "\"$TAG_DST\"" 2>/dev/null && added=1
+		fi
+		# Exempt exactly the UDP slice UU marks, and nothing when it marks none.
+		# A blanket range would return the device's other UDP from OpenClash
+		# without UU accelerating it, which on a boosted PC is a lot of traffic
+		# quietly leaving the proxy.
+		if [ -n "$udp" ] &&
+		   ! nft list chain inet fw4 "$c" 2>/dev/null | grep -q "$TAG_UDP"; then
+			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC meta l4proto udp \
+				udp dport "{ $udp }" counter return \
+				comment "\"$TAG_UDP\"" 2>/dev/null && added=1
+		fi
+		# UU's prerouting hook runs before OpenClash's, so by the time traffic
+		# reaches this chain UU's own mark already identifies it exactly,
+		# whatever the ports.
+		if [ -n "$mark" ] &&
+		   ! nft list chain inet fw4 "$c" 2>/dev/null | grep -q "$TAG_MARK"; then
+			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC meta mark "$mark" \
+				counter return comment "\"$TAG_MARK\"" 2>/dev/null && added=1
+		fi
+	done
+	[ "$added" = "1" ] && \
+		log "Exemptions in $(oc_chains | tr '\n' ' ' | sed 's/ $//'):" \
+		    "destinations${udp:+ + udp $udp}${mark:+ + mark $mark}."
+	return 0
+}
+
+del_tagged() {
+	local pat c h
+	pat="$(echo "$@" | tr ' ' '|')"
+	for c in $(oc_chains); do
+		# Delete by handle, highest first, so earlier handles stay valid.
+		for h in $(nft -a list chain inet fw4 "$c" 2>/dev/null |
+		           grep -E "$pat" |
+		           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+			nft delete rule inet fw4 "$c" handle "$h" 2>/dev/null
+		done
+	done
+}
+
+del_rules() { del_tagged "$TAG_DST" "$TAG_UDP" "$TAG_MARK"; }
+
+# Replace both sets in a single atomic nft run. Adding ~12k elements one
+# "nft add element" at a time would fork 12k times per poll and never finish.
+apply_sets() {
+	local ips="$1" prefixes="$2" n=0 line=""
+
+	{
+		echo "flush set inet fw4 $SET_SRC"
+		if [ -n "$ips" ]; then
+			echo "add element inet fw4 $SET_SRC { $(echo $ips | tr ' ' ',') }"
+		fi
+		echo "flush set inet fw4 $SET_DST"
+		# Chunked so no single statement grows unreasonably long.
+		for p in $prefixes; do
+			if [ -z "$line" ]; then
+				line="$p"
+			else
+				line="$line,$p"
+			fi
+			n=$((n + 1))
+			if [ "$n" -ge 2000 ]; then
+				echo "add element inet fw4 $SET_DST { $line }"
+				line=""; n=0
+			fi
+		done
+		[ -n "$line" ] && echo "add element inet fw4 $SET_DST { $line }"
+	} > "$NFT_TMP"
+
+	nft -f "$NFT_TMP" 2>/dev/null
+}
+
+# ------------------------------------------------------------ lan_ac handling
+
+# A boosted device sitting in lan_ac_black_ips returns from OpenClash's chain
+# before our exemption can apply anything finer, so cooperative mode would be a
+# no-op for it. Take those entries out while we manage the device, remembering
+# them so cleanup can put them back exactly as they were.
+release_lan_ac() {
+	local ips="$1" ip changed=0
+
+	# Off by default: this edits and commits the user's OpenClash config, which
+	# is not ours to churn - especially since this runs on a poll loop. Without
+	# it a device listed there simply keeps bypassing OpenClash wholesale, so
+	# say so once instead of silently doing nothing.
+	if [ "$(uci_get oc_manage_lan_ac)" != "1" ]; then
+		for ip in $ips; do
+			if uci -q get openclash.config.lan_ac_black_ips | grep -qw "$ip"; then
+				[ -f /var/run/uu-openclash.lanwarn ] && return
+				: > /var/run/uu-openclash.lanwarn
+				log "$ip is in OpenClash's lan_ac_black_ips, so it bypasses the" \
+				    "proxy entirely and cooperative mode cannot refine it." \
+				    "Remove it there, or enable 'Manage OpenClash device list'."
+			fi
+		done
+		return 0
+	fi
+
+	for ip in $ips; do
+		if uci -q get openclash.config.lan_ac_black_ips | grep -qw "$ip"; then
+			uci -q del_list openclash.config.lan_ac_black_ips="$ip" && {
+				grep -qx "$ip" "$LANAC" 2>/dev/null || echo "$ip" >> "$LANAC"
+				changed=1
+				log "Removed $ip from lan_ac_black_ips so its non-game traffic can use OpenClash."
+			}
+		fi
+	done
+	if [ "$changed" = "1" ]; then
+		uci commit openclash
+		nft delete element inet fw4 lan_ac_black_ips "{ $(echo $ips | tr ' ' ',') }" 2>/dev/null
+	fi
+}
+
+restore_lan_ac() {
+	local ip changed=0
+	[ -f "$LANAC" ] || return 0
+	while read -r ip; do
+		[ -n "$ip" ] || continue
+		uci -q get openclash.config.lan_ac_black_ips | grep -qw "$ip" && continue
+		uci -q add_list openclash.config.lan_ac_black_ips="$ip" && changed=1
+	done < "$LANAC"
+	if [ "$changed" = "1" ]; then
+		uci commit openclash
+		log "Restored previously bypassed devices to lan_ac_black_ips."
+	fi
+	rm -f "$LANAC"
+}
+
+# ------------------------------------------------------------------ modes
+
+cleanup() {
+	del_rules
+	nft flush set inet fw4 "$SET_SRC" 2>/dev/null
+	nft flush set inet fw4 "$SET_DST" 2>/dev/null
+	nft delete set inet fw4 "$SET_SRC" 2>/dev/null
+	nft delete set inet fw4 "$SET_DST" 2>/dev/null
+	restore_lan_ac
+	rm -f "$STATE" "$SIG" "$SPECSTATE" "$NFT_TMP"
+
+	# bypass-mode entries are UCI, so undo them there.
+	if uci -q get openclash.config >/dev/null 2>&1; then
+		local changed=0 m
+		for m in $(uci_get oc_bypass_mac); do
+			uci -q del_list openclash.config.lan_ac_black_macs="$m" && changed=1
+		done
+		for m in $(uci_get oc_bypass_ip); do
+			uci -q del_list openclash.config.lan_ac_black_ips="$m" && changed=1
+		done
+		if [ "$changed" = "1" ]; then
+			uci commit openclash
+			/etc/init.d/openclash reload >/dev/null 2>&1
+			log "Restored OpenClash device access control."
+		fi
+	fi
+	log "Cooperative integration removed."
+}
+
+run_bypass() {
+	local changed=0 m
+	[ -f /etc/config/openclash ] || { err "OpenClash not installed."; exit 1; }
+
+	# lan_ac_mode 0 is OpenClash's blacklist mode: listed devices skip the proxy.
+	[ "$(uci -q get openclash.config.lan_ac_mode)" = "0" ] || {
+		uci set openclash.config.lan_ac_mode='0'; changed=1
+	}
+	for m in $(uci_get oc_bypass_mac); do
+		uci -q get openclash.config.lan_ac_black_macs | grep -qi "$m" || {
+			uci add_list openclash.config.lan_ac_black_macs="$m"; changed=1
+		}
+	done
+	for m in $(uci_get oc_bypass_ip); do
+		uci -q get openclash.config.lan_ac_black_ips | grep -q "$m" || {
+			uci add_list openclash.config.lan_ac_black_ips="$m"; changed=1
+		}
+	done
+
+	if [ "$changed" = "1" ]; then
+		uci commit openclash
+		/etc/init.d/openclash reload >/dev/null 2>&1
+		log "Excluded the configured devices from OpenClash."
+	else
+		log "Device bypass already in place."
+	fi
+
+	while :; do nap 3600; done
+}
+
+# The UDP ports and fwmark to exempt for the devices currently boosted, merged
+# across them. A configured value wins; otherwise it is read from UU's own rules.
+claimed_spec() {
+	local ips="$1" d p udp="$UU_UDP_PORTS" mark="$UU_MARK_CFG"
+
+	for d in $ips; do
+		if [ -z "$UU_UDP_PORTS" ]; then
+			for p in $(uu_marked_udp_ports "$d"); do
+				case ",$udp," in
+					*",$p,"*) ;;
+					*) udp="${udp:+$udp,}$p" ;;
+				esac
+			done
+		fi
+		[ -n "$mark" ] || mark="$(uu_marked_fwmark "$d")"
+	done
+	printf '%s|%s\n' "$udp" "$mark"
+}
+
+run_cooperative() {
+	local ips prefixes sig prev devs chains spec udp mark
+
+	# Wait in-loop rather than exiting. Exiting hands control to procd's
+	# respawn, and since OpenClash's chains legitimately disappear for a moment
+	# on any fw4 reload, that turned a transient condition into a restart storm
+	# - each cycle running cleanup and churning state.
+	while [ -z "$(oc_chains)" ]; do
+		warn_once_chains
+		nap "$INTERVAL"
+	done
+	log "Cooperative mode active (poll: ${INTERVAL}s, min prefix: /$MINPFX)."
+
+	: > "$STATE"
+	while :; do
+		ips="$(boosted_ips)"
+
+		if [ -z "$ips" ]; then
+			# Nothing is being boosted. Drop the exemption so OpenClash behaves
+			# exactly as it would without this plugin. Check the live set as
+			# well as our signature file: after a daemon restart the signature
+			# is gone but stale elements can still be in the set.
+			if [ -s "$SIG" ] ||
+			   nft list set inet fw4 "$SET_SRC" 2>/dev/null | grep -q elements; then
+				log "No devices boosted; removing exemptions."
+				del_rules
+				nft flush set inet fw4 "$SET_SRC" 2>/dev/null
+				nft flush set inet fw4 "$SET_DST" 2>/dev/null
+				restore_lan_ac
+				: > "$SIG"
+				: > "$STATE"
+			fi
+			nap "$INTERVAL"
+			continue
+		fi
+
+		devs="$(find_tuns)"
+		prefixes="$(collect_prefixes $devs)"
+
+		# Re-applying 12k elements every 5s would be pointless churn, so only
+		# rebuild when the inputs actually change.
+		sig="$(printf '%s|%s' "$ips" "$prefixes" | md5sum | awk '{print $1}')"
+		prev="$(cat "$SIG" 2>/dev/null)"
+
+		spec="$(claimed_spec "$ips")"
+		udp="${spec%%|*}"
+		mark="${spec#*|}"
+
+		ensure_sets
+		# Always re-check the rules: an OpenClash reload wipes them even when
+		# nothing else has changed.
+		ensure_rules "$udp" "$mark"
+
+		if [ "$sig" != "$prev" ]; then
+			release_lan_ac "$ips"
+			if apply_sets "$ips" "$prefixes"; then
+				echo "$sig" > "$SIG"
+				# "echo $empty > file" still writes a newline, which the status
+				# page would count as one prefix.
+				if [ -n "$prefixes" ]; then
+					printf '%s\n' "$prefixes" > "$STATE"
+				else
+					: > "$STATE"
+				fi
+				log "Boosted: $(echo $ips | tr '\n' ' ')- exempting" \
+				    "$(echo "$prefixes" | grep -c .) destination prefix(es)${udp:+ and udp $udp}."
+			else
+				err "Failed to apply nftables sets (see $NFT_TMP)."
+			fi
+		fi
+
+		nap "$INTERVAL"
+	done
+}
+
+# ------------------------------------------------------------------ entry
+
+case "$MODE" in
+	cleanup)     cleanup ;;
+	# The handler must exit: a bare "trap cleanup" tears the integration down
+	# and then falls back into the poll loop, leaving a daemon that ignored
+	# SIGTERM and has to be SIGKILLed, with its exemptions already removed.
+	bypass)      trap 'cleanup; exit 0' INT TERM; run_bypass ;;
+	cooperative) trap 'cleanup; exit 0' INT TERM; run_cooperative ;;
+	*)           err "Unknown mode '$MODE'"; exit 1 ;;
+esac

@@ -1,10 +1,15 @@
-name: 打包UU加速器
+name: Build packages
 
 on:
   push:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish a GitHub Release with the built packages"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -13,33 +18,100 @@ concurrency:
 env:
   PACKAGE_NAME: luci-app-uugamebooster
   PACKAGE_DIR: luci-app-uugamebooster
-  TZ: Asia/Shanghai
+  ZIG_VERSION: "0.13.0"
 
 permissions:
   contents: write
-  
+
 jobs:
-  Compile:
-    name: 打包 ${{ matrix.target.name }}
+  # The packages people actually install. An OpenWrt SDK cannot build these:
+  # the view filters target five architectures at once, and the emulator is a
+  # prebuilt binary, so both are assembled out of tree by tools/.
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install zig
+        run: |
+          curl -sSLo /tmp/zig.tar.xz \
+            "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          mkdir -p "$HOME/zig"
+          tar xf /tmp/zig.tar.xz -C "$HOME/zig" --strip-components=1
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+
+      - name: Build the view filters
+        run: |
+          sh tools/build-preload.sh
+          ls -l payload/preload/
+
+      - name: Check the translation catalogue
+        # Every string the sources ask for has to be in the .po, and every
+        # string in the .po has to still exist in the sources.
+        run: |
+          python3 tools/i18n-scan.py /tmp/scanned.pot
+          python3 - <<'EOF'
+          import re, sys
+          sys.path.insert(0, "tools")
+          from po2lmo import parse_po, unescape
+          pot = open("/tmp/scanned.pot", encoding="utf-8").read()
+          want = [unescape(m) for m in re.findall(r'^msgid "(.*)"$', pot, re.M) if m]
+          have = dict(parse_po("luci-app-uugamebooster/po/zh_Hans/uugamebooster.po"))
+          missing = [w for w in want if w not in have]
+          stale = [k for k in have if k not in want]
+          for m in missing:
+              print("missing translation: %s" % m[:100])
+          for s in stale:
+              print("stale translation:   %s" % s[:100])
+          print("%d strings, %d translated" % (len(want), len(have)))
+          sys.exit(1 if (missing or stale) else 0)
+          EOF
+
+      - name: Build both flavours
+        run: |
+          mkdir -p dist
+          python3 tools/mkipk.py --arch x86_64 "dist/${PACKAGE_NAME}_x86_64.ipk"
+          python3 tools/mkipk.py --arch all    "dist/${PACKAGE_NAME}_all.ipk"
+          ls -l dist/
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: uugamebooster-packages
+          path: dist/*.ipk
+
+  # Does the package still build inside a real OpenWrt SDK? Worth knowing, since
+  # the Makefile and the feed dependencies are only exercised here. The output is
+  # deliberately not shipped: it lacks the emulator and the view filters.
+  sdk:
+    name: SDK build (${{ matrix.target.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         target:
-          - { name: ipk, sdk_url: "https://downloads.openwrt.org/releases/22.03.0/targets/x86/64/openwrt-sdk-22.03.0-x86-64_gcc-11.2.0_musl.Linux-x86_64.tar.xz", sdk_tar: "SDK.tar.xz", sdk_dir: "SDK", artifact_pattern: "luci-app-uugamebooster_*.ipk" }
-          - { name: apk, sdk_url: "snapshot", sdk_tar: "SNAPSDK.tar.zst", sdk_dir: "SNAPSDK", artifact_pattern: "luci-app-uugamebooster-*.apk" }
+          - name: ipk
+            sdk_url: "https://downloads.openwrt.org/releases/23.05.5/targets/x86/64/openwrt-sdk-23.05.5-x86-64_gcc-12.3.0_musl.Linux-x86_64.tar.xz"
+            sdk_tar: SDK.tar.xz
+            sdk_dir: SDK
+          - name: apk
+            sdk_url: snapshot
+            sdk_tar: SNAPSDK.tar.zst
+            sdk_dir: SNAPSDK
     steps:
-      - name: 检出源码
-        uses: actions/checkout@main
+      - name: Check out source
+        uses: actions/checkout@v4
 
-      - name: 安装依赖
+      - name: Install build dependencies
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get -y install curl git tar zstd python3 python3-pyelftools python3-setuptools
 
-      - name: 下载 SDK
+      - name: Download the OpenWrt SDK
         run: |
           mkdir -p tmp
           if [ "${{ matrix.target.name }}" = "ipk" ]; then
@@ -50,11 +122,7 @@ jobs:
           else
             BASE_URL="https://downloads.openwrt.org/snapshots/targets/x86/64/"
             SDK_NAME=$(curl -s $BASE_URL | grep -oE 'openwrt-sdk-x86-64[^"]+\.tar\.zst' | head -n 1)
-            if ! curl -SLk --connect-timeout 30 --retry 2 "$BASE_URL/$SDK_NAME" -o "./tmp/${{ matrix.target.sdk_tar }}"; then
-              BASE_URL2="https://mirrors.pku.edu.cn/files/openwrt/snapshots/targets/x86/64/"
-              SDK_NAME=$(curl -s $BASE_URL2 | grep -oE 'openwrt-sdk-x86-64[^"]+\.tar\.zst' | head -n 1)
-              curl -SLk --connect-timeout 30 --retry 2 "$BASE_URL2/$SDK_NAME" -o "./tmp/${{ matrix.target.sdk_tar }}"
-            fi
+            curl -SLk --connect-timeout 30 --retry 2 "$BASE_URL/$SDK_NAME" -o "./tmp/${{ matrix.target.sdk_tar }}"
             cd tmp
             zstd -d ${{ matrix.target.sdk_tar }}
             tar xf SNAPSDK.tar
@@ -62,12 +130,12 @@ jobs:
             mv "$SDK_DIR" "${{ matrix.target.sdk_dir }}"
           fi
 
-      - name: 复制源码到 SDK
+      - name: Copy the package into the SDK
         run: |
           mkdir -p "tmp/${{ matrix.target.sdk_dir }}/package/${PACKAGE_NAME}"
           cp -a "${PACKAGE_DIR}/." "tmp/${{ matrix.target.sdk_dir }}/package/${PACKAGE_NAME}/"
 
-      - name: 安装 feeds
+      - name: Install feeds
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
           ./scripts/feeds update -a
@@ -75,56 +143,55 @@ jobs:
           echo "CONFIG_PACKAGE_${PACKAGE_NAME}=m" >> .config
           make defconfig
 
-      - name: 编译 UU加速器
+      - name: Build
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
-          make "package/${PACKAGE_NAME}/compile" V=99
+          make "package/${PACKAGE_NAME}/compile" V=s
 
-      - name: 上传产物
-        uses: actions/upload-artifact@main
-        with:
-          name: uugamebooster-${{ matrix.target.name }}
-          path: tmp/${{ matrix.target.sdk_dir }}/bin/packages/x86_64/base/${{ matrix.target.artifact_pattern }}
+      - name: Confirm the SDK compiled the translation catalogue
+        # luci.mk runs po2lmo itself, so this also checks the po file is valid
+        # input for the real tool and not just for ours.
+        run: |
+          cd tmp/${{ matrix.target.sdk_dir }}
+          find . -name 'uugamebooster.zh-cn.lmo' -print -quit | grep . \
+            || { echo "no catalogue produced by the SDK build"; exit 1; }
 
-  Release:
+  release:
+    # Only ever publishes when a human explicitly asks for it.
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
     runs-on: ubuntu-latest
-    needs: [Compile]
+    needs: [package, sdk]
     steps:
-      - name: 检出源码
-        uses: actions/checkout@main
+      - name: Check out source
+        uses: actions/checkout@v4
 
-      - name: 获取版本号
+      - name: Read version
         id: version
         run: |
           VERSION="$(awk -F ':=' '/^PKG_VERSION:=/ { print $2; exit }' "./${PACKAGE_DIR}/Makefile")"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "build_time=$(date '+%Y年%m月%d日%H:%M:%S' | jq -sRr @uri)" >> $GITHUB_ENV
 
-      - name: 下载 IPK 产物
-        uses: actions/download-artifact@main
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
         with:
-          name: uugamebooster-ipk
+          merge-multiple: true
           path: ./
 
-      - name: 下载 APK 产物
-        uses: actions/download-artifact@main
+      - name: Create release
+        uses: softprops/action-gh-release@v2
         with:
-          name: uugamebooster-apk
-          path: ./
-
-      - name: 创建 Release
-        uses: lmq8267/action-gh-release@master
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
+          tag_name: v${{ steps.version.outputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
           body: |
-             > ### ![](https://img.shields.io/badge/%E7%BC%96%E8%AF%91%E6%97%B6%E9%97%B4-${{ env.build_time }}-8267?logo=github&labelColor=%E9%A1%BB)![](https://img.shields.io/github/downloads/${{ github.repository }}/${{ steps.version.outputs.version }}/total?label=%E4%B8%8B%E8%BD%BD%E6%AC%A1%E6%95%B0&logo=github) 
+            LuCI app for the NetEase UU Game Booster: PC and phone boosting,
+            OpenClash coexistence, a device list, and an English or Chinese UI
+            following LuCI's language setting.
 
-             - **[luci-app-uugamebooster-1.1-r1.apk](https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/luci-app-uugamebooster-${{ steps.version.outputs.version }}-r1.apk) 是OpenWrt新版的APK包** 安装时要加跳过证书验证命令 `--allow-untrusted` 例如：
-             ```
-              apk add --allow-untrusted luci-app-uugamebooster-${{ steps.version.outputs.version }}-r1.apk
-             ```
-             
+            Two flavours:
+
+            | File | For |
+            |---|---|
+            | `${{ env.PACKAGE_NAME }}_x86_64.ipk` | x86_64 routers. Bundles the emulator, so the vendor build needs no extra download. |
+            | `${{ env.PACKAGE_NAME }}_all.ipk` | Every other target. The vendor build runs natively where the CPU matches it. |
           files: |
             luci-app-uugamebooster_*.ipk
-            luci-app-uugamebooster-*.apk
