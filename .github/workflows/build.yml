@@ -23,16 +23,20 @@ env:
 permissions:
   contents: write
 
+# Pinned rather than ubuntu-latest, which migrates to Ubuntu 26 from
+# 2026-10-19. This builds release artifacts for routers, so the toolchain moving
+# under us unannounced is worth more than being on the newest image. Bump it
+# deliberately, having checked the SDK still builds.
 jobs:
   # The packages people actually install. An OpenWrt SDK cannot build these:
   # the view filters target five architectures at once, and the emulator is a
   # prebuilt binary, so both are assembled out of tree by tools/.
   package:
     name: Package
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install zig
         run: |
@@ -80,7 +84,7 @@ jobs:
           ls -l
 
       - name: Upload packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: uugamebooster-packages
           path: dist/*.ipk
@@ -92,7 +96,7 @@ jobs:
   # checksummed on first use of the emulated build.
   sdk:
     name: SDK build (${{ matrix.target.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -107,7 +111,7 @@ jobs:
             sdk_dir: SNAPSDK
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install build dependencies
         env:
@@ -118,7 +122,8 @@ jobs:
 
       - name: Install zig
         run: |
-          curl -sSLo /tmp/zig.tar.xz             "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          curl -sSLo /tmp/zig.tar.xz \
+            "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
           mkdir -p "$HOME/zig"
           tar xf /tmp/zig.tar.xz -C "$HOME/zig" --strip-components=1
           echo "$HOME/zig" >> "$GITHUB_PATH"
@@ -167,22 +172,42 @@ jobs:
           cd tmp/${{ matrix.target.sdk_dir }}
           make "package/${PACKAGE_NAME}/compile" V=s
 
-      - name: Confirm the SDK compiled the translation catalogue
-        # luci.mk runs po2lmo itself, so this also checks the po file is valid
-        # input for the real tool and not just for ours.
+      - name: Confirm the SDK produced a complete package
+        # luci.mk runs po2lmo itself, so the catalogue check also confirms the po
+        # file is valid input for the real tool and not just for ours.
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
           find . -name 'uugamebooster.zh-cn.lmo' -print -quit | grep . \
             || { echo "no catalogue produced by the SDK build"; exit 1; }
+          find . -name 'uu-view-preload-aarch64.so' -print -quit | grep . \
+            || { echo "view filters missing from the SDK build"; exit 1; }
+
+      - name: Collect the package
+        run: |
+          mkdir -p out
+          find "tmp/${{ matrix.target.sdk_dir }}/bin" \
+            -name "luci-app-uugamebooster*.${{ matrix.target.name }}" \
+            -exec cp {} out/ \;
+          ls -l out/
+
+      # Only the apk is kept. The ipk from here would collide with the one built
+      # by mkipk.py, which is the same package plus the bundled emulator.
+      - name: Upload the apk
+        if: ${{ matrix.target.name == 'apk' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: uugamebooster-apk
+          path: out/*.apk
+          if-no-files-found: error
 
   release:
     # Only ever publishes when a human explicitly asks for it.
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.release }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [package, sdk]
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Read version
         id: version
@@ -191,13 +216,13 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           merge-multiple: true
           path: ./
 
       - name: Create release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.version.outputs.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
