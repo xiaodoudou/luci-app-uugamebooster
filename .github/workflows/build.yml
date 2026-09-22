@@ -70,11 +70,14 @@ jobs:
           EOF
 
       - name: Build both flavours
+        # No output name given, so mkipk.py names each file from the version in
+        # the Makefile. Release assets then say which build they are.
         run: |
           mkdir -p dist
-          python3 tools/mkipk.py --arch x86_64 "dist/${PACKAGE_NAME}_x86_64.ipk"
-          python3 tools/mkipk.py --arch all    "dist/${PACKAGE_NAME}_all.ipk"
-          ls -l dist/
+          cd dist
+          python3 ../tools/mkipk.py --arch x86_64
+          python3 ../tools/mkipk.py --arch all
+          ls -l
 
       - name: Upload packages
         uses: actions/upload-artifact@v4
@@ -191,7 +194,10 @@ jobs:
 
             | File | For |
             |---|---|
-            | `${{ env.PACKAGE_NAME }}_x86_64.ipk` | x86_64 routers. Bundles the emulator, so the vendor build needs no extra download. |
-            | `${{ env.PACKAGE_NAME }}_all.ipk` | Every other target. The vendor build runs natively where the CPU matches it. |
+            | `..._x86_64.ipk` | x86_64 routers. Bundles the emulator, so the vendor build needs no extra download. |
+            | `..._all.ipk` | Every other target. The vendor build runs natively where the CPU matches it. |
+
+            Install with `opkg install <file>`. Every dependency is declared, so
+            there is nothing to fetch by hand.
           files: |
             luci-app-uugamebooster_*.ipk
