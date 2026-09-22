@@ -40,7 +40,27 @@ for spec in \
 do
 	name="${spec%%:*}"
 	target="${spec#*:}"
-	"$ZIG" cc -target "$target" -shared -fPIC -O2 -Wall \
+	# -g0 because zig emits debug info by default, and on arm that came to
+	# ~590 KB of .debug_* sections on an object that is 17 KB everywhere else.
+	# Interposition only reads .dynsym, which this does not touch.
+	"$ZIG" cc -target "$target" -shared -fPIC -O2 -Wall -g0 \
 		-o "$OUT/uu-view-preload-$name.so" "$SRC"
+	# -g0 only silences our own translation unit. On arm, zig links compiler-rt
+	# builtins that carry their own debug info, which took the object from 10 KB
+	# to 800 KB, so strip after linking as well.
+	#
+	# Best effort, for two reasons. Writing over the input makes zig objcopy fail
+	# with TRUNCATED_ELF, hence the temporary; and it refuses big-endian objects
+	# outright ("ELF to ELF copying only supports native endian"), so mips cannot
+	# be stripped on an x86_64 host. That one is 8 KB unstripped, so a failure
+	# here is not worth aborting the build for.
+	if "$ZIG" objcopy --strip-debug \
+			"$OUT/uu-view-preload-$name.so" "$OUT/uu-view-preload-$name.so.tmp" \
+			2>/dev/null &&
+	   [ -s "$OUT/uu-view-preload-$name.so.tmp" ]; then
+		mv -f "$OUT/uu-view-preload-$name.so.tmp" "$OUT/uu-view-preload-$name.so"
+	else
+		rm -f "$OUT/uu-view-preload-$name.so.tmp"
+	fi
 	echo "built $OUT/uu-view-preload-$name.so ($target)"
 done

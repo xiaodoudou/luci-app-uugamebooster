@@ -1,3 +1,5 @@
 dist/
 payload/
 __pycache__/
+# Compiled by tools/build-preload.sh so an SDK build can package them.
+luci-app-uugamebooster/root/usr/lib/uuplugin/

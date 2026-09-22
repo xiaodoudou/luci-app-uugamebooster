@@ -85,9 +85,11 @@ jobs:
           name: uugamebooster-packages
           path: dist/*.ipk
 
-  # Does the package still build inside a real OpenWrt SDK? Worth knowing, since
-  # the Makefile and the feed dependencies are only exercised here. The output is
-  # deliberately not shipped: it lacks the emulator and the view filters.
+  # The APK flavour, for snapshot builds that use apk instead of opkg, plus a
+  # check that the Makefile and the feed dependencies still work - they are only
+  # exercised here. The view filters are compiled in first, so what comes out is
+  # a complete package; only the emulator is missing, and that is downloaded and
+  # checksummed on first use of the emulated build.
   sdk:
     name: SDK build (${{ matrix.target.name }})
     runs-on: ubuntu-latest
@@ -113,6 +115,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get -y install curl git tar zstd python3 python3-pyelftools python3-setuptools
+
+      - name: Install zig
+        run: |
+          curl -sSLo /tmp/zig.tar.xz             "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-x86_64-${ZIG_VERSION}.tar.xz"
+          mkdir -p "$HOME/zig"
+          tar xf /tmp/zig.tar.xz -C "$HOME/zig" --strip-components=1
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+
+      - name: Compile the view filters into the package
+        # luci.mk packages everything under root/, so this is all it takes for an
+        # SDK build to carry them.
+        run: |
+          sh tools/build-preload.sh "${PACKAGE_DIR}/root/usr/lib/uuplugin"
+          ls -l "${PACKAGE_DIR}/root/usr/lib/uuplugin/"
 
       - name: Download the OpenWrt SDK
         run: |
@@ -194,10 +210,16 @@ jobs:
 
             | File | For |
             |---|---|
-            | `..._x86_64.ipk` | x86_64 routers. Bundles the emulator, so the vendor build needs no extra download. |
-            | `..._all.ipk` | Every other target. The vendor build runs natively where the CPU matches it. |
+            | `..._x86_64.ipk` | x86_64 routers on opkg. Bundles the emulator, so the vendor build needs no extra download. |
+            | `..._all.ipk` | Any other target on opkg. The vendor build runs natively where the CPU matches; on x86_64 the emulator is downloaded on first use. |
+            | `....apk` | Snapshot builds, which use apk rather than opkg. |
 
-            Install with `opkg install <file>`. Every dependency is declared, so
-            there is nothing to fetch by hand.
+            ```
+            opkg install luci-app-uugamebooster_*.ipk
+            apk add --allow-untrusted luci-app-uugamebooster*.apk
+            ```
+
+            Every dependency is declared, so there is nothing to fetch by hand.
           files: |
             luci-app-uugamebooster_*.ipk
+            luci-app-uugamebooster*.apk

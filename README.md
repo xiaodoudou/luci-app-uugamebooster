@@ -11,7 +11,7 @@
 [![OpenWrt](https://img.shields.io/badge/OpenWrt-22.03%2B-brightgreen?style=flat-square)](#requirements)
 [![Arch](https://img.shields.io/badge/Arch-x86__64%20%7C%20aarch64%20%7C%20arm%20%7C%20mipsel%20%7C%20mipseb-blueviolet?style=flat-square)](docs/builds.md)
 [![UI](https://img.shields.io/badge/UI-English%20%7C%20%E4%B8%AD%E6%96%87-orange?style=flat-square)](#language)
-[![Package](https://img.shields.io/badge/Package-IPK-blue?style=flat-square)](#install)
+[![Package](https://img.shields.io/badge/Package-IPK%20%7C%20APK-blue?style=flat-square)](#install)
 
 A LuCI web interface for [NetEase UU](https://uu.163.com) on OpenWrt. Fork of
 [lmq8267/luci-app-uugamebooster](https://github.com/lmq8267/luci-app-uugamebooster).
@@ -71,6 +71,12 @@ On the router:
 
 ```bash
 opkg install luci-app-uugamebooster_*.ipk
+```
+
+Snapshot builds use `apk` rather than `opkg`. Those packages come from the SDK build, so they carry the view filters but not the emulator, which is downloaded and checksummed on first use of the vendor build:
+
+```bash
+apk add --allow-untrusted luci-app-uugamebooster*.apk
 ```
 
 An OpenWrt SDK build handles the scripts and Lua fine, but it can't produce the two compiled pieces: the emulator, and view filters for five architectures. You get a package without them, which means no emulated build and a device list that only filters what a mount namespace can reach.

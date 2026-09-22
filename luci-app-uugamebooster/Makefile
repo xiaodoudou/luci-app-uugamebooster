@@ -14,11 +14,15 @@ LUCI_TITLE:=LuCI support for NetEase UU Game Booster (x86_64 / English / OpenCla
 #   nftables  the OpenClash split and boost detection read nft directly.
 #   unshare   the mount namespace half of the device list.
 LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat +ca-bundle +unshare +ip +nftables
-# The package bundles an x86_64 qemu for the emulated OEM build.
-LUCI_PKGARCH:=x86_64
-# Two pieces cannot come from the SDK and are built out of tree instead - the
-# qemu binary, and the view filters in src/, one of which targets aarch64. See
-# tools/build-preload.sh and tools/mkipk.py, and the Install section of README.
+# Nothing here is built for the host architecture. The view filters are carried
+# as prebuilt objects for all five, and the right one is chosen at runtime, so
+# the package is genuinely portable.
+LUCI_PKGARCH:=all
+# Two pieces cannot be produced by the SDK. The view filters are compiled out of
+# tree by tools/build-preload.sh into root/usr/lib/uuplugin/, from where luci.mk
+# packages them like any other file. The user-mode qemu is not carried here at
+# all: this path downloads and checksums it on first use of the emulated build.
+# tools/mkipk.py bundles it instead, which is why that flavour is x86_64 only.
 
 PKG_NAME:=luci-app-uugamebooster
 PKG_VERSION:=2.0
