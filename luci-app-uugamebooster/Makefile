@@ -13,7 +13,10 @@ LUCI_TITLE:=LuCI support for NetEase UU Game Booster (x86_64 / English / OpenCla
 #             applet does not cover them. Either ip-tiny or ip-full satisfies it.
 #   nftables  the OpenClash split and boost detection read nft directly.
 #   unshare   the mount namespace half of the device list.
-LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat +ca-bundle +unshare +ip +nftables
+#   iptables  the OEM build shells out to iptables and ships none, and fw4
+#             images have none, so boosting fails without it. Virtual: a real
+#             package before 22.03, then provided by iptables-nft.
+LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat +ca-bundle +unshare +ip +nftables +iptables
 # Nothing here is built for the host architecture. The view filters are carried
 # as prebuilt objects for all five, and the right one is chosen at runtime, so
 # the package is genuinely portable.
@@ -25,7 +28,7 @@ LUCI_PKGARCH:=all
 # tools/mkipk.py bundles it instead, which is why that flavour is x86_64 only.
 
 PKG_NAME:=luci-app-uugamebooster
-PKG_VERSION:=2.0
+PKG_VERSION:=2.1
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Fork of lmq8267/luci-app-uugamebooster
 

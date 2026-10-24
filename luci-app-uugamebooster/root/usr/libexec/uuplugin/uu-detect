@@ -17,7 +17,10 @@
 # /proc/<pid>/exe then says definitively whose instance it is.
 
 RUN_DIR="${RUN_DIR:-/var/tmp/uu}"
+OEM_DIR="${OEM_DIR:-/opt/uu-oem}"
 OURS_PATH="$(readlink -f "$RUN_DIR/uuplugin" 2>/dev/null)"
+# A natively run OEM build is a plain uuplugin process too, just from OEM_DIR.
+OEM_PATH="$OEM_DIR/uuplugin"
 
 ours=""
 foreign=""
@@ -34,6 +37,8 @@ for pid in $(pgrep uuplugin 2>/dev/null); do
 		*) continue ;;
 	esac
 	if [ -n "$OURS_PATH" ] && [ "$exe" = "$OURS_PATH" ]; then
+		ours="$pid"
+	elif [ "$exe" = "$OEM_PATH" ]; then
 		ours="$pid"
 	else
 		foreign="$exe (pid $pid)"

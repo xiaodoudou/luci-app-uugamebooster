@@ -110,7 +110,8 @@ detect_arch() {
 elf_arch() {
 	local f="$1" m
 	[ -r "$f" ] || return 1
-	set -- $(hexdump -n 20 -v -e '20/1 "%d "' "$f" 2>/dev/null)
+	# %u, not %d: some busybox builds print %d signed, turning aarch64's 0xb7 into -73.
+	set -- $(hexdump -n 20 -v -e '20/1 "%u "' "$f" 2>/dev/null)
 	[ $# -ge 20 ] || return 1
 	if [ "$6" = "2" ]; then
 		m=$(( ${19} * 256 + ${20} ))
@@ -745,6 +746,7 @@ foreign_uu_pids() {
 			*) continue ;;
 		esac
 		[ -n "$ours" ] && [ "$exe" = "$ours" ] && continue
+		[ "$exe" = "$OEM_DIR/uuplugin" ] && continue
 		echo "$pid"
 	done
 }
@@ -786,8 +788,14 @@ takeover() {
 		kill -9 "$pid" 2>/dev/null && uu_log "Force-killed pid $pid."
 	done
 
-	if [ -d /usr/sbin/uu ] || [ -d /tmp/uu ] || [ -e /etc/rc.d/S99uuplugin ]; then
-		rm -rf /usr/sbin/uu /tmp/uu /etc/rc.d/S99uuplugin
+	# Neither marks an official install: /tmp/uu alone is the OEM build's runtime
+	# state, and S99uuplugin is also this service's own enable link (START=99).
+	local hook=""
+	[ -e /etc/rc.d/S99uuplugin ] && \
+		[ "$(readlink /etc/rc.d/S99uuplugin)" != "../init.d/uuplugin" ] && hook=1
+	if [ -d /usr/sbin/uu ] || [ -e /tmp/uu/uuplugin ] || [ -n "$hook" ]; then
+		rm -rf /usr/sbin/uu /tmp/uu
+		[ -n "$hook" ] && rm -f /etc/rc.d/S99uuplugin
 		rm -f /var/run/uuplugin.pid
 		uu_log "Removed /usr/sbin/uu, /tmp/uu and the S99 boot hook."
 		found=1

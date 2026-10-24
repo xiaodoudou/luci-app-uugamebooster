@@ -20,8 +20,14 @@ Checked off the router:
 - Lua parses under the real interpreter, views render through `tools/check-views.lua`, and the status endpoint runs with `luci.http` stubbed
 - Route filtering, the minimum-prefix guard and multi-TUN merging have unit tests, including rejection of `default`, `0.0.0.0/0` and anything over-broad
 
-**Not covered:** any router that isn't x86-64. The native vendor-build path is implemented and reasoned from the ELF header, but it has never run on ARM hardware.
+Checked on a **NanoPi R4S (aarch64) running OpenWrt 25.12.5**, with the `h3c-nx30pro` vendor build running natively:
 
-One incidental find: the tarball ships more than the booster. There's `xtables-nft-multi` (UU carries its own iptables-nft) and `xuplugin-guardian`, a watchdog. So UU manipulates netfilter itself, which is precisely why the two tools collide without the coexistence work.
+- The ELF check picks the native path, the plugin registers with NetEase's cloud, and the phone app binds it
+- A boost brings up `tun163`, UU's policy routes and its mangle/nat rules, once `iptables` is installed. Without it, binding still works but every boost tears the tunnel down within seconds
+- `uu-detect` reports the native process as ours, and `takeover` leaves it, `/tmp/uu` and the service's own boot link alone
+
+**Not covered:** MIPS routers. On the R4S, start-up and registration ran with a normal WAN, but binding and boosting were only exercised with the router on the home LAN and no WAN.
+
+One incidental find: the generic tarball ships more than the booster. There's `xtables-nft-multi` (UU carries its own iptables-nft) and `xuplugin-guardian`, a watchdog. So UU manipulates netfilter itself, which is precisely why the two tools collide without the coexistence work. The vendor tarball has only the watchdog, and calls the system `iptables` instead.
 
 [← back to the README](../README.md)
