@@ -267,3 +267,21 @@ msgstr "状态"
 
 msgid "Collecting data..."
 msgstr "正在获取数据…"
+
+msgid "UA3F"
+msgstr "UA3F"
+
+msgid "Keep game traffic out of UA3F (recommended)"
+msgstr "游戏流量不经过 UA3F（推荐）"
+
+msgid "Leave UA3F alone"
+msgstr "不改动 UA3F"
+
+msgid "UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, which also takes a boosted device's game connections away from UU.<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the game servers UU routes into its tunnel, and only for boosted devices. Everything else from that device, its web browsing included, still goes through UA3F.<br /><strong>Leave UA3F alone</strong> changes nothing.<br />Nothing happens unless UA3F is installed and running."
+msgstr "UA3F 通过把局域网的 TCP 流量转给自己来改写 User-Agent，这也会把被加速设备的游戏连接从 UU 手里抢走。<br /><br /><strong>游戏流量不经过 UA3F</strong> 只放行 UU 导入隧道的游戏服务器地址，且仅对被加速的设备生效。该设备的其他流量，包括网页浏览，仍然经过 UA3F。<br /><strong>不改动 UA3F</strong> 则什么都不做。<br />只有在 UA3F 已安装并运行时才会生效。"
+
+msgid "left alone"
+msgstr "未改动"
+
+msgid "Exempted from UA3F"
+msgstr "已排除 UA3F"

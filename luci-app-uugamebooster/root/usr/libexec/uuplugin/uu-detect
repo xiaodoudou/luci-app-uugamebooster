@@ -75,6 +75,11 @@ for pid in $(pgrep clash 2>/dev/null; pgrep mihomo 2>/dev/null); do
 	esac
 done
 
+# UA3F's process name says nothing about its mode; its nft table existing is
+# what means it is intercepting traffic.
+ua3f=""
+nft list table inet UA3F >/dev/null 2>&1 && ua3f="1"
+
 # Devices UU is boosting right now.
 #
 # UU adds a policy routing rule per boosted device ("from <ip> lookup <table>")
@@ -177,6 +182,7 @@ echo "ours=$ours"
 echo "build=$build"
 echo "foreign=$foreign"
 echo "openclash=$openclash"
+echo "ua3f=$ua3f"
 echo "boosted=${boosted% }"
 echo "blocked=${blocked# }"
 

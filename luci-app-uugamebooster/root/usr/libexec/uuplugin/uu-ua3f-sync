@@ -1,0 +1,152 @@
+#!/bin/sh
+# uu-ua3f-sync - keep a boosted device's game traffic out of UA3F.
+#
+# Usage: uu-ua3f-sync <cooperative|cleanup>
+#
+# UA3F diverts LAN TCP to its own listener from its own table, inet UA3F: in
+# TPROXY mode chain PREROUTING marks it 0x1c9 and hands it to 127.0.0.1, in
+# REDIRECT mode a nat chain of the same name rewrites the destination. Either
+# way a boosted device's game connections never reach UU's tunnel. UDP is left
+# alone by UA3F, so only TCP needs exempting.
+#
+# UA3F's own skip list (UA3F_SKIP_IPSET) is destination-only and global, the
+# same trap as OpenClash's wan_ac_black_ips: filling it with UU's prefixes would
+# take those destinations out of UA3F for every device. So, as for OpenClash,
+# the exemption is "boosted device AND a prefix UU routes". The device's other
+# traffic, its ordinary web browsing included, still gets UA3F's rewrite.
+#
+# UA3F deletes and recreates its table on every start, taking our sets and rule
+# with it, so every pass checks for both and rebuilds whatever is missing.
+
+MODE="${1:-cooperative}"
+LOG_TAG="uu-ua3f"
+. /usr/libexec/uuplugin/uu-lib.sh
+
+TABLE="UA3F"
+CHAIN="PREROUTING"
+SET_SRC="uu_boosted"
+SET_DST="uu_dests"
+TAG="uu-ua3f-dest"
+STATE="/var/run/uu-ua3f.state"
+SIG="/var/run/uu-ua3f.sig"
+NFT_TMP="/tmp/.uu-ua3f.nft"
+
+ua3f_up() { nft list chain inet "$TABLE" "$CHAIN" >/dev/null 2>&1; }
+
+have_sets() { nft list set inet "$TABLE" "$SET_DST" >/dev/null 2>&1; }
+
+# Sets have to live in UA3F's table: a rule cannot reference another table's.
+add_sets() {
+	nft add set inet "$TABLE" "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
+	nft add set inet "$TABLE" "$SET_DST" '{ type ipv4_addr; flags interval; auto-merge; }' 2>/dev/null
+}
+
+has_rule() { nft list chain inet "$TABLE" "$CHAIN" 2>/dev/null | grep -q "$TAG"; }
+
+add_rule() {
+	nft insert rule inet "$TABLE" "$CHAIN" meta l4proto tcp \
+		ip saddr @$SET_SRC ip daddr @$SET_DST counter return \
+		comment "\"$TAG\"" 2>/dev/null
+}
+
+# Rule first: a set still referenced by a rule cannot be deleted.
+del_all() {
+	local h
+	for h in $(nft -a list chain inet "$TABLE" "$CHAIN" 2>/dev/null |
+	           grep "$TAG" | sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+		nft delete rule inet "$TABLE" "$CHAIN" handle "$h" 2>/dev/null
+	done
+	nft delete set inet "$TABLE" "$SET_SRC" 2>/dev/null
+	nft delete set inet "$TABLE" "$SET_DST" 2>/dev/null
+}
+
+# Both sets in one nft run, chunked: UU can route thousands of prefixes.
+apply_sets() {
+	local ips="$1" prefixes="$2" n=0 line="" p
+	{
+		echo "flush set inet $TABLE $SET_SRC"
+		[ -n "$ips" ] && echo "add element inet $TABLE $SET_SRC { $(echo $ips | tr ' ' ',') }"
+		echo "flush set inet $TABLE $SET_DST"
+		for p in $prefixes; do
+			line="${line:+$line,}$p"
+			n=$((n + 1))
+			if [ "$n" -ge 2000 ]; then
+				echo "add element inet $TABLE $SET_DST { $line }"
+				line=""; n=0
+			fi
+		done
+		[ -n "$line" ] && echo "add element inet $TABLE $SET_DST { $line }"
+	} > "$NFT_TMP"
+	nft -f "$NFT_TMP" 2>/dev/null
+}
+
+cleanup() {
+	del_all
+	rm -f "$STATE" "$SIG" "$NFT_TMP"
+	log "UA3F exemptions removed."
+}
+
+run_cooperative() {
+	local ips prefixes sig prev up=""
+
+	: > "$STATE"
+	while :; do
+		if ! ua3f_up; then
+			# UA3F stopped, or is restarting: its table is gone and our sets
+			# with it, so the next pass with it back has to refill them.
+			[ "$up" = "1" ] && log "UA3F's table is gone; waiting for it."
+			up=0
+			rm -f "$SIG"
+			: > "$STATE"
+			nap "$INTERVAL"
+			continue
+		fi
+		[ "$up" = "1" ] || log "UA3F found (poll: ${INTERVAL}s, min prefix: /$MINPFX)."
+		up=1
+
+		ips="$(boosted_ips)"
+		if [ -z "$ips" ]; then
+			if [ -s "$SIG" ] || has_rule; then
+				log "No devices boosted; removing UA3F exemptions."
+				del_all
+				rm -f "$SIG"
+				: > "$STATE"
+			fi
+			nap "$INTERVAL"
+			continue
+		fi
+
+		prefixes="$(collect_prefixes $(find_tuns))"
+		sig="$(printf '%s|%s' "$ips" "$prefixes" | md5sum | awk '{print $1}')"
+		prev="$(cat "$SIG" 2>/dev/null)"
+
+		if ! have_sets; then
+			add_sets
+			prev=""
+		fi
+		has_rule || add_rule
+
+		if [ "$sig" != "$prev" ]; then
+			if apply_sets "$ips" "$prefixes"; then
+				echo "$sig" > "$SIG"
+				if [ -n "$prefixes" ]; then
+					printf '%s\n' "$prefixes" > "$STATE"
+				else
+					: > "$STATE"
+				fi
+				log "Boosted: $(echo $ips | tr '\n' ' ')- exempting" \
+				    "$(echo "$prefixes" | grep -c .) destination prefix(es) from UA3F."
+			else
+				err "Failed to apply nftables sets (see $NFT_TMP)."
+			fi
+		fi
+
+		nap "$INTERVAL"
+	done
+}
+
+case "$MODE" in
+	cleanup)     cleanup ;;
+	cooperative) trap 'cleanup; exit 0' INT TERM; run_cooperative ;;
+	*)           err "Unknown mode '$MODE'"; exit 1 ;;
+esac

@@ -21,6 +21,7 @@ s.addremove = false
 s:tab("general", translate("General"))
 s:tab("build",   translate("What to boost"))
 s:tab("clash",   translate("OpenClash"))
+s:tab("ua3f",    translate("UA3F"))
 s:tab("devices", translate("Device visibility"))
 s:tab("howto",   translate("How to use"))
 
@@ -139,6 +140,22 @@ o = s:taboption("clash", Value, "oc_min_prefix",
 o.datatype = "range(1,32)"
 o.default = "8"
 o:depends("openclash_mode", "cooperative")
+
+-- -------------------------------------------------------------------- UA3F
+
+o = s:taboption("ua3f", ListValue, "ua3f_mode", translate("Coexistence"))
+o:value("cooperative", translate("Keep game traffic out of UA3F (recommended)"))
+o:value("off", translate("Leave UA3F alone"))
+o.default = "cooperative"
+o.description = translate(
+	"UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, " ..
+	"which also takes a boosted device's game connections away from UU." ..
+	"<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the " ..
+	"game servers UU routes into its tunnel, and only for boosted devices. " ..
+	"Everything else from that device, its web browsing included, still goes " ..
+	"through UA3F." ..
+	"<br /><strong>Leave UA3F alone</strong> changes nothing." ..
+	"<br />Nothing happens unless UA3F is installed and running.")
 
 -- ------------------------------------------------------------ device list
 

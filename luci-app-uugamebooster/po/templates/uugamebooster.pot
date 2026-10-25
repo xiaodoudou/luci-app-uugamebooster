@@ -19,173 +19,191 @@ msgid "What to boost"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:23
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:112
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:114
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:123
 msgid "OpenClash"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:24
-msgid "Device visibility"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:139
+msgid "UA3F"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:25
+msgid "Device visibility"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:26
 msgid "How to use"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:29
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:30
 msgid "Enable"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:33
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:34
 msgid "Router name"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:34
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:35
 msgid "Shown in the UU app, so you can tell routers apart. Changing it after binding means unbinding and binding again."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:39
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:40
 msgid "Open the firewall for UU's tunnel"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:40
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:41
 msgid "Adds a firewall zone for UU's tunnel (tun16+) and lets the LAN forward into it. Required on OpenWrt 22.03 and newer, where forwarding is rejected by default - without it nothing can be boosted."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:47
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:48
 msgid "Plugin build"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:48
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:49
 msgid "Game consoles only (recommended)"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:49
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:50
 msgid "Game consoles, PCs and phones"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:51
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:52
 msgid "NetEase ships PC and phone boosting only in the builds it makes for router vendors, which identify themselves to its servers as H3C hardware. Ask for those and the plugin fetches one and works out how to run it:<br />&#8226; on an ARM router it runs directly;<br />&#8226; on x86_64 it runs under emulation - everything needed is bundled, only the plugin itself is downloaded, and CPU use is a little higher.<br />The console-only builds are NetEase's plain OpenWrt ones. They are leaner, but the app will not offer your PC or phone."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:62
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:63
 msgid "Vendor model"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:63
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:64
 msgid "Which vendor build to ask NetEase for. Both behave the same; try the other one if a download fails."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:70
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:71
 msgid "CPU architecture"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:71
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:72
 msgid "Only needed if the automatic choice is wrong."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:72
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:73
 msgid "Detect automatically"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:76
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:77
 msgid "mipsel (little endian)"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:77
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:78
 msgid "mipseb (big endian)"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:84
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:119
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:85
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:146
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:128
 msgid "Coexistence"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:85
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:86
 msgid "Split the traffic (recommended)"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:86
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:87
 msgid "Take whole devices off OpenClash"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:87
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:88
 msgid "Leave OpenClash alone"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:89
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:90
 msgid "UU and OpenClash both intercept LAN traffic, so left alone one of them silently wins.<br /><br /><strong>Split the traffic</strong> lets each handle what it is for. Only what UU actually accelerates leaves OpenClash: the game servers UU routes into its tunnel, plus the UDP ports it marks - both read back from UU's own live rules, for boosted devices only. Everything else from that same device keeps going through OpenClash.<br /><em>So most of a boosted PC's traffic still going through OpenClash is the intended result, not a fault.</em><br /><br /><strong>Take whole devices off OpenClash</strong> is the blunt fallback: the devices you list stop using the proxy entirely while UU runs.<br /><strong>Leave OpenClash alone</strong> changes nothing - useful if you would rather tune OpenClash by hand."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:105
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:106
 msgid "Move devices off OpenClash's own bypass list"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:106
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:107
 msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips). A boosted device on that list skips OpenClash for everything, so the split above can do nothing for it. Turn this on to let the plugin take such a device off OpenClash's list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's configuration."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:116
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:117
 msgid "Devices to bypass - by MAC"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:117
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:118
 msgid "These stop using OpenClash while UU is running."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:122
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:123
 msgid "Devices to bypass - by IP"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:123
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:124
 msgid "Addresses or CIDR ranges that stop using OpenClash while UU runs."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:128
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:129
 msgid "How often to re-check UU's routes"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:129
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:130
 msgid "In seconds. UU adds and removes game routes as it goes."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:135
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:136
 msgid "Widest route to divert"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:136
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:137
 msgid "A safety limit, as a prefix length: never send a route broader than this around OpenClash. Stops one stray default route from pulling the whole internet out of the proxy."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:146
-msgid "Devices UU is allowed to see"
-msgstr ""
-
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:147
-msgid "Every device on the network"
+msgid "Keep game traffic out of UA3F (recommended)"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:148
-msgid "Everything except the devices below"
+msgid "Leave UA3F alone"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:149
-msgid "Only the devices below"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:150
+msgid "UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, which also takes a boosted device's game connections away from UU.<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the game servers UU routes into its tunnel, and only for boosted devices. Everything else from that device, its web browsing included, still goes through UA3F.<br /><strong>Leave UA3F alone</strong> changes nothing.<br />Nothing happens unless UA3F is installed and running."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:151
-msgid "The UU app lists whatever the plugin finds on your network, which by default is everything. This narrows what it can find at all, so a device left out never appears in the app, is never offered for boosting, and is never reported to NetEase.<br />Nothing else on the router is affected: the real DHCP leases and ARP table are untouched, and no traffic is blocked."
-msgstr ""
-
-#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:159
-msgid "By IP address"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:163
+msgid "Devices UU is allowed to see"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:164
-msgid "By MAC address"
+msgid "Every device on the network"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:165
+msgid "Everything except the devices below"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:166
+msgid "Only the devices below"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:168
+msgid "The UU app lists whatever the plugin finds on your network, which by default is everything. This narrows what it can find at all, so a device left out never appears in the app, is never offered for boosting, and is never reported to NetEase.<br />Nothing else on the router is affected: the real DHCP leases and ARP table are untouched, and no traffic is blocked."
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:176
+msgid "By IP address"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:181
+msgid "By MAC address"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:182
 msgid "Steadier than an IP for anything using DHCP. Resolved to whichever address the device currently holds."
 msgstr ""
 
@@ -241,120 +259,132 @@ msgstr ""
 msgid "Boosting is not always on: traffic only takes UU's tunnel for a device you have picked in the app, and only for the game servers UU routes there."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:65
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:66
 msgid "Ready"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:67
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:68
 msgid "Starting"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:68
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:69
 msgid "no connection to NetEase yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:70
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:71
 msgid "Registering"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:71
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:72
 msgid "the app cannot find the router yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:73
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:74
 msgid "Not running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:74
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:75
 msgid "Service"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:79
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:83
 msgid "Registration"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:81
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:85
 msgid "not registered yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:82
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:88
 msgid "NetEase link"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:84
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:90
 msgid "connecting"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:88
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:94
 msgid "Conflicting UU installation"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:90
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:96
 msgid "It owns the PID file, so this service cannot start. Run"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:91
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:97
 msgid "to hand over."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:95
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:101
 msgid "vendor build, running natively - consoles, PCs and phones"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:96
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:102
 msgid "vendor build, emulated - consoles, PCs and phones"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:97
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:103
 msgid "standard build - game consoles only"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:99
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:115
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:105
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:124
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:140
 msgid "Running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:102
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:108
 msgid "Tunnel"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:104
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:110
 msgid "none yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:106
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:112
 msgid "Boosted devices"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:109
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:115
 msgid "none - boost a device in the UU app"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:112
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
 msgid "not installed"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:116
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:125
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:141
 msgid "installed, not running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:122
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:131
 msgid "Exempted from proxy"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:123
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:132
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:147
 msgid "game destinations, for boosted devices only"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:124
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:133
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:148
 msgid "nothing - no device is being boosted"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:134
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:142
+msgid "left alone"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:146
+msgid "Exempted from UA3F"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:186
 msgid "Status"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:135
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:187
 msgid "Collecting data..."
 msgstr ""
 

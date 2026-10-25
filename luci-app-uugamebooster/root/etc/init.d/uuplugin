@@ -21,6 +21,7 @@ UU_CONF="$RUN_DIR/uu.conf"
 TARBALL="/tmp/uu.tar.gz"
 API="https://router.uu.163.com/api/plugin?type="
 SYNC="/usr/libexec/uuplugin/uu-openclash-sync"
+UA3F_SYNC="/usr/libexec/uuplugin/uu-ua3f-sync"
 DETECT="/usr/libexec/uuplugin/uu-detect"
 VIEW="/usr/libexec/uuplugin/uu-view"
 PRELOAD_DIR="/usr/lib/uuplugin"
@@ -463,6 +464,23 @@ start_openclash_sync() {
 	procd_close_instance
 }
 
+start_ua3f_sync() {
+	local mode
+	mode="$(uci -q get uuplugin.@uuplugin[0].ua3f_mode)"
+	[ -z "$mode" ] && mode="cooperative"
+	[ "$mode" = "off" ] && return 0
+	[ -x "$UA3F_SYNC" ] || return 0
+	[ -f /etc/config/ua3f ] || return 0
+
+	uu_log "UA3F integration mode: $mode"
+	procd_open_instance uu_ua3f_sync
+	procd_set_param command "$UA3F_SYNC" "$mode"
+	procd_set_param respawn
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
 start_service() {
 	local enabled arch type oem=0
 
@@ -622,11 +640,13 @@ start_service() {
 
 	add_firewall_rule
 	start_openclash_sync
+	start_ua3f_sync
 	uu_log "Started. Bind this router in the UU console-booster app to begin."
 }
 
 stop_service() {
 	[ -x "$SYNC" ] && "$SYNC" cleanup >/dev/null 2>&1
+	[ -x "$UA3F_SYNC" ] && "$UA3F_SYNC" cleanup >/dev/null 2>&1
 
 	# Only tear the firewall zone down when the service is actually being
 	# turned off. Doing it on every stop meant a restart removed and re-added

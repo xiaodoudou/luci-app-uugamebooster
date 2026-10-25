@@ -114,19 +114,37 @@ function uuRender(d) {
 			  d.boosted.replace(/ /g, '</code> <code>') + '</code>'
 			: '<span class="uu-muted"><%:none - boost a device in the UU app%></span>');
 
+		// UA3F rows only appear when it is installed, so whichever block comes
+		// last closes the panel.
+		var ua3f = d.ua3f_installed;
 		if (!d.openclash_installed) {
-			h += uuRow('<%:OpenClash%>', '<span class="uu-muted"><%:not installed%></span>', true);
+			h += uuRow('<%:OpenClash%>', '<span class="uu-muted"><%:not installed%></span>', !ua3f);
 		} else {
 			h += uuRow('<%:OpenClash%>', d.openclash_running
 				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
 				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>');
 
 			var coop = (d.mode == 'cooperative');
-			h += uuRow('<%:Coexistence%>', '<code>' + (d.mode || '?') + '</code>', !coop);
+			h += uuRow('<%:Coexistence%>', '<code>' + (d.mode || '?') + '</code>', !coop && !ua3f);
 
 			if (coop) {
 				h += uuRow('<%:Exempted from proxy%>', (d.bypassed > 0)
 					? '<span class="uu-num">' + d.bypassed + '</span> <%:game destinations, for boosted devices only%>'
+					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', !ua3f);
+			}
+		}
+
+		if (ua3f) {
+			var ucoop = (d.ua3f_mode == 'cooperative') && d.ua3f_running;
+			h += uuRow('<%:UA3F%>', (d.ua3f_running
+				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
+				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>') +
+				(d.ua3f_mode == 'off' ? ' <span class="uu-muted">&ndash; <%:left alone%></span>' : ''),
+				!ucoop);
+
+			if (ucoop) {
+				h += uuRow('<%:Exempted from UA3F%>', (d.ua3f_exempted > 0)
+					? '<span class="uu-num">' + d.ua3f_exempted + '</span> <%:game destinations, for boosted devices only%>'
 					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', true);
 			}
 		}

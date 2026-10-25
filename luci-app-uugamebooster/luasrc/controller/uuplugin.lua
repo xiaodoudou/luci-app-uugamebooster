@@ -63,14 +63,22 @@ function act_status()
 	end
 	e.mode = uci:get_first("uuplugin", "uuplugin", "openclash_mode") or "cooperative"
 
-	-- Number of destination prefixes currently diverted away from OpenClash
-	e.bypassed = 0
-	local st = fs.readfile("/var/run/uu-openclash.state")
-	if st then
-		for _ in st:gmatch("[^\r\n]+") do
-			e.bypassed = e.bypassed + 1
+	local function lines(path)
+		local n, st = 0, fs.readfile(path)
+		if st then
+			for _ in st:gmatch("[^\r\n]+") do n = n + 1 end
 		end
+		return n
 	end
+
+	-- Number of destination prefixes currently diverted away from OpenClash
+	e.bypassed = lines("/var/run/uu-openclash.state")
+
+	-- UA3F integration state, and the prefixes kept out of it
+	e.ua3f_installed = fs.access("/etc/config/ua3f")
+	e.ua3f_running = det:match("ua3f=1") ~= nil
+	e.ua3f_mode = uci:get_first("uuplugin", "uuplugin", "ua3f_mode") or "cooperative"
+	e.ua3f_exempted = lines("/var/run/uu-ua3f.state")
 
 	-- UU creates one TUN per boosted device (tun163, tun164, ...), so list them all
 	local tun = sys.exec("ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d'@' -f1 | grep -E '^tun' | grep -v '^utun' | tr '\\n' ' '")
