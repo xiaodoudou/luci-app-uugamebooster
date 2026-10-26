@@ -90,6 +90,12 @@ function uuRender(d) {
 				: '<span class="uu-muted"><%:connecting%>&hellip;</span>');
 		}
 
+		if (d.no_bootstart) {
+			h += '<div class="uu-alert"><span class="t-bad"><%:Will not start after a reboot%></span><br />' +
+			     '<%:Boot start is off although the service is enabled. Save & Apply, or run%> ' +
+			     '<code>/etc/init.d/uuplugin enable</code><%:, to turn it back on.%></div>';
+		}
+
 		if (d.foreign) {
 			h += '<div class="uu-alert"><span class="t-bad"><%:Conflicting UU installation%></span><br />' +
 			     '<code>' + d.foreign + '</code><br />' +

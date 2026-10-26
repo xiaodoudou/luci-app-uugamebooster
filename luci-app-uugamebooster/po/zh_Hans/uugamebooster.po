@@ -285,3 +285,12 @@ msgstr "未改动"
 
 msgid "Exempted from UA3F"
 msgstr "已排除 UA3F"
+
+msgid "Will not start after a reboot"
+msgstr "重启后不会自动启动"
+
+msgid "Boot start is off although the service is enabled. Save & Apply, or run"
+msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用，或执行"
+
+msgid ", to turn it back on."
+msgstr "，即可重新开启。"

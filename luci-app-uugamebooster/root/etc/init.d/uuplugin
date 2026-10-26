@@ -492,6 +492,13 @@ start_service() {
 		return 1
 	fi
 
+	# The uci switch is what says on or off. A takeover from before 2.1 deleted
+	# the boot link, leaving a service that ran until the next reboot.
+	if ! enabled; then
+		enable
+		uu_log "Boot start was off although the service is enabled; turned it back on."
+	fi
+
 	arch="$(uci -q get uuplugin.@uuplugin[0].arch)"
 
 	# "oem" selects the vendor build, the only way to get PC and phone boosting;

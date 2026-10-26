@@ -63,6 +63,11 @@ function act_status()
 	end
 	e.mode = uci:get_first("uuplugin", "uuplugin", "openclash_mode") or "cooperative"
 
+	-- Switched on, but without its boot link it would not come back after a
+	-- reboot. The next start or reload repairs it; until then, say so.
+	e.no_bootstart = uci:get_first("uuplugin", "uuplugin", "enabled") == "1"
+		and not fs.access("/etc/rc.d/S99uuplugin")
+
 	local function lines(path)
 		local n, st = 0, fs.readfile(path)
 		if st then

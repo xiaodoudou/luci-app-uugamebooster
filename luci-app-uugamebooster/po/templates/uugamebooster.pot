@@ -19,13 +19,13 @@ msgid "What to boost"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:23
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:123
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:127
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:129
 msgid "OpenClash"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:24
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:139
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:145
 msgid "UA3F"
 msgstr ""
 
@@ -103,7 +103,7 @@ msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:85
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:146
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:128
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:134
 msgid "Coexistence"
 msgstr ""
 
@@ -304,87 +304,99 @@ msgid "connecting"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:94
-msgid "Conflicting UU installation"
+msgid "Will not start after a reboot"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:95
+msgid "Boot start is off although the service is enabled. Save & Apply, or run"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:96
-msgid "It owns the PID file, so this service cannot start. Run"
+msgid ", to turn it back on."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:97
-msgid "to hand over."
-msgstr ""
-
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:101
-msgid "vendor build, running natively - consoles, PCs and phones"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:100
+msgid "Conflicting UU installation"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:102
-msgid "vendor build, emulated - consoles, PCs and phones"
+msgid "It owns the PID file, so this service cannot start. Run"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:103
-msgid "standard build - game consoles only"
+msgid "to hand over."
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:105
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:124
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:140
-msgid "Running"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:107
+msgid "vendor build, running natively - consoles, PCs and phones"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:108
+msgid "vendor build, emulated - consoles, PCs and phones"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:109
+msgid "standard build - game consoles only"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:111
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:130
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:146
+msgid "Running"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:114
 msgid "Tunnel"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:110
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:116
 msgid "none yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:112
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:118
 msgid "Boosted devices"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:115
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
 msgid "none - boost a device in the UU app"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:127
 msgid "not installed"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:125
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:141
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:131
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:147
 msgid "installed, not running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:131
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:137
 msgid "Exempted from proxy"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:132
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:147
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:138
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:153
 msgid "game destinations, for boosted devices only"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:133
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:148
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:139
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:154
 msgid "nothing - no device is being boosted"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:142
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:148
 msgid "left alone"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:146
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:152
 msgid "Exempted from UA3F"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:186
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:192
 msgid "Status"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:187
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:193
 msgid "Collecting data..."
 msgstr ""
 
