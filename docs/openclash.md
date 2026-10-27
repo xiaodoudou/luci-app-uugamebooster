@@ -38,7 +38,7 @@ The **minimum prefix length** (default `/8`) stops an over-broad route from ever
 
 ## Things to watch out for
 
-- **fake-ip mode gets in the way.** With OpenClash in fake-ip mode your device resolves game domains to `198.18.x.x`, so UU never sees a real server IP for *domain-addressed* traffic and can't classify it. Console matchmaking is mostly raw-IP UDP and is unaffected, but a game that looks up its servers by name needs that domain in OpenClash's fake-ip filter, or `redir-host` mode instead.
+- **fake-ip doesn't work with UU.** That's by design: fake-ip answers DNS with `198.18.x.x` addresses and hijacks the traffic sent to them, so neither your devices nor UU's own core ever see the real server IPs that UU routes on. When the core's own lookups come back fake, its tunnel can't even come up. Run OpenClash in `redir-host` or `redir-host-tun`. A fake-ip filter list only covers the domains you thought to put in it. If you use fake-ip to stop DNS leaks, redir-host can do the same with the DNS set up for it: foreign DoH resolvers as the default, written as IP addresses and sent through a node with `respect-rules`, and `nameserver-policy` for Chinese domains.
 - **A device on OpenClash's own bypass list can't be split.** `lan_ac_black_ips` returns before any finer rule gets a look, so that device skips the proxy wholesale. **Move devices off OpenClash's own bypass list** lets the plugin pull it out while it's boosted and put it back afterwards. It's off by default, because it edits and saves OpenClash's config.
 - **IPv4 only for now.** `wan_ac_black_ipv6s` exists and the same approach would work. It just isn't wired up.
 

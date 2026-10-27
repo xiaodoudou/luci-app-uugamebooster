@@ -66,12 +66,13 @@ fi
 
 # OpenClash ships its core under several names (clash, clash_meta, mihomo), and
 # "pgrep -x clash" reports nothing even when comm is exactly "clash". Resolving
-# /proc/<pid>/exe and checking it lives under /etc/openclash is unambiguous.
+# /proc/<pid>/exe and checking it lives under OpenClash's directory is
+# unambiguous. On some devices OpenClash runs the core from /tmp/etc/openclash.
 openclash=""
 for pid in $(pgrep clash 2>/dev/null; pgrep mihomo 2>/dev/null); do
 	exe="$(readlink -f "/proc/$pid/exe" 2>/dev/null)"
 	case "$exe" in
-		/etc/openclash/*) openclash="$pid"; break ;;
+		/etc/openclash/*|/tmp/etc/openclash/*) openclash="$pid"; break ;;
 	esac
 done
 
