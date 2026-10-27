@@ -28,7 +28,7 @@ LUCI_PKGARCH:=all
 # tools/mkipk.py bundles it instead, which is why that flavour is x86_64 only.
 
 PKG_NAME:=luci-app-uugamebooster
-PKG_VERSION:=2.2.1
+PKG_VERSION:=2.2.2
 PKG_RELEASE:=1
 PKG_MAINTAINER:=Fork of lmq8267/luci-app-uugamebooster
 
