@@ -36,7 +36,13 @@ UA3F coexistence, on the same R4S with **UA3F 3.7.0 in TPROXY mode**:
 
 Off the router, a WSL harness in throwaway network namespaces sends real SYNs at a UA3F-shaped table: TPROXY and REDIRECT chains, recovery after the table is recreated or gone for a while, removal when nothing is boosted, cleanup on SIGTERM, and the OpenClash sync after its discovery code moved to `uu-lib.sh`.
 
-**Not covered:** MIPS routers. On the R4S, start-up and registration ran with a normal WAN, but binding and boosting were only exercised with the router on the home LAN and no WAN. UA3F's REDIRECT mode only ran in the WSL harness.
+The DNAT fallback for firmware without iptables DNAT (see [Firewall](firewall.md#firmware-whose-iptables-has-no-dnat)):
+
+- The cause comes from a Photonicat 2 owner's `strace` of the vendor build on photonicatWrt 26.04.1: every rule before the DNS `DNAT` succeeds, that one exits 2, and the core deletes everything 42 ms later. Their `libiptext.so` has no NAT targets, where stock OpenWrt's carries them
+- In WSL, inside throwaway network namespaces and with a fake iptables that fails on DNAT as photonicatWrt's does: the stand-in turns the core's DNS rule and the R4S-style rules (port in the target, no protocol, `-m tcp`) into nftables, checks and deletes them like iptables (duplicates included), passes every other call through, and sends anything unusual (negation, unknown matches, quotes) to the real iptables. A client in a second namespace sent DNS through the rule and its counter moved
+- The start-up probe passes on stock OpenWrt 23.05 x86-64, where DNAT is built in, so nothing changes there. `uu-detect` reports `dnat=nft` only for a core started with the stand-in
+
+**Not covered:** MIPS routers, and the DNAT fallback on a Photonicat itself. On the R4S, start-up and registration ran with a normal WAN, but binding and boosting were only exercised with the router on the home LAN and no WAN. UA3F's REDIRECT mode only ran in the WSL harness.
 
 One incidental find: the generic tarball ships more than the booster. There's `xtables-nft-multi` (UU carries its own iptables-nft) and `xuplugin-guardian`, a watchdog. So UU manipulates netfilter itself, which is precisely why the two tools collide without the coexistence work. The vendor tarball has only the watchdog, and calls the system `iptables` instead.
 

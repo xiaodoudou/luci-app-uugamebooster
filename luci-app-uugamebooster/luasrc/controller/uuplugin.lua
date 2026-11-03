@@ -32,6 +32,9 @@ function act_status()
 	e.arch = sys.exec("uname -m"):gsub("%s+$", "")
 	e.build = det:match("build=([%w%-]*)")
 	if e.build == "" then e.build = nil end
+	-- This firmware's iptables has no DNAT target, so the core's DNS redirect
+	-- is being done in nftables instead
+	e.dnat_fallback = det:match("dnat=nft") ~= nil
 
 	-- OpenClash integration state
 	e.openclash_installed = fs.access("/etc/config/openclash")

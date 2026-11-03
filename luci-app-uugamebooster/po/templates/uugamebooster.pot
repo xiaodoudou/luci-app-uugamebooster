@@ -19,13 +19,13 @@ msgid "What to boost"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:23
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:127
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:129
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:128
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:130
 msgid "OpenClash"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:24
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:145
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:146
 msgid "UA3F"
 msgstr ""
 
@@ -103,7 +103,7 @@ msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:85
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:146
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:134
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:135
 msgid "Coexistence"
 msgstr ""
 
@@ -340,63 +340,67 @@ msgid "standard build - game consoles only"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:111
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:130
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:146
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:131
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:147
 msgid "Running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:114
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:113
+msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:115
 msgid "Tunnel"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:116
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:117
 msgid "none yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:118
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:119
 msgid "Boosted devices"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:121
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:122
 msgid "none - boost a device in the UU app"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:127
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:128
 msgid "not installed"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:131
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:147
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:132
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:148
 msgid "installed, not running"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:137
-msgid "Exempted from proxy"
-msgstr ""
-
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:138
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:153
-msgid "game destinations, for boosted devices only"
+msgid "Exempted from proxy"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:139
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:154
+msgid "game destinations, for boosted devices only"
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:140
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:155
 msgid "nothing - no device is being boosted"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:148
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:149
 msgid "left alone"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:152
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:153
 msgid "Exempted from UA3F"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:192
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:193
 msgid "Status"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:193
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:194
 msgid "Collecting data..."
 msgstr ""
 

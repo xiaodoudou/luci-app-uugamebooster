@@ -28,4 +28,18 @@ It used to come out on every stop, which meant a restart removed and re-added it
 
 Leaving the zone in place is safe: it only matches `tun16+`, and those interfaces don't exist while UU isn't running.
 
+## Firmware whose iptables has no DNAT
+
+For every boosted device the vendor build sends that device's DNS to `8.8.8.8`:
+
+```
+iptables -t nat -I PREROUTING -i br-lan -s <device> -p udp --dport 53 -j DNAT --to-destination 8.8.8.8
+```
+
+If that one rule fails, it rolls the whole boost back. The tunnel comes up, its rules go in, then everything is deleted again within a fraction of a second, over and over. Stock OpenWrt builds DNAT into iptables, but some vendor firmware leaves it out. photonicatWrt 26.04.1 on the Photonicat 2 is one, where the rule fails with `unknown option "--to-destination"` and no package in its feeds adds DNAT back.
+
+The service checks for this at every start, the way the core calls iptables (`XTABLES_LIBDIR=/lib iptables -j DNAT -h`). Where DNAT is missing, it puts a small stand-in, `/usr/libexec/uuplugin/xt/iptables`, first on the core's `PATH`. That turns UU's DNAT calls (add, check and delete) into the same rule in an nftables table of its own, `ip uuplugin_nat`, and passes every other call to the real iptables untouched. A call it doesn't fully understand also goes to the real one, so the worst case is the failure that was there anyway. The table goes away when the service stops.
+
+The log says so at start, and the status page notes it under **Running**. On firmware where DNAT works, none of this happens and the core runs exactly as before.
+
 [← back to the README](../README.md)

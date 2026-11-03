@@ -179,8 +179,17 @@ if [ -n "$ours" ] && [ -r "/proc/$ours/cmdline" ]; then
 	esac
 fi
 
+# Whether the core was started with the DNAT stand-in first on its PATH, for
+# firmware whose iptables has no DNAT target (see xt/iptables).
+dnat=""
+if [ -n "$ours" ] && tr '\0' '\n' < "/proc/$ours/environ" 2>/dev/null |
+		grep -q '^PATH=/usr/libexec/uuplugin/xt:'; then
+	dnat="nft"
+fi
+
 echo "ours=$ours"
 echo "build=$build"
+echo "dnat=$dnat"
 echo "foreign=$foreign"
 echo "openclash=$openclash"
 echo "ua3f=$ua3f"
