@@ -289,6 +289,9 @@ msgstr "已排除 UA3F"
 msgid "Will not start after a reboot"
 msgstr "重启后不会自动启动"
 
+msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
+msgstr "此固件的 iptables 没有 DNAT 目标，UU 的 DNS 重定向改由 nftables 处理。"
+
 msgid "Boot start is off although the service is enabled. Save & Apply, or run"
 msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用，或执行"
 

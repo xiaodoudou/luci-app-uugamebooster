@@ -1,0 +1,141 @@
+#!/bin/sh
+# iptables stand-in for firmware whose iptables was built without the DNAT
+# target. photonicatWrt is one: "-j DNAT" there fails with
+# 'unknown option "--to-destination"'.
+#
+# For every boosted device the UU core redirects DNS with
+#   iptables -t nat -I PREROUTING -i br-lan -s <ip> -p udp --dport 53 \
+#            -j DNAT --to-destination 8.8.8.8
+# and when that one rule fails it rolls the whole boost back, tunnel and all.
+# This turns exactly those calls (add, check, delete) into the same rule in an
+# nftables table of our own. Anything it does not fully understand goes to the
+# real iptables untouched, so the worst case is the failure there was anyway.
+#
+# The init script only puts this directory first on the core's PATH after
+# probing that the real iptables cannot do DNAT.
+
+REAL="${UU_REAL_IPTABLES:-/usr/sbin/iptables}"
+TABLE="uuplugin_nat"
+
+parse() {
+	table="filter"; cmd=""; chain=""; iif=""; src=""; dst=""
+	proto=""; dport=""; target=""; to=""; other=0
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+			-w|--wait)
+				case "$2" in [0-9]*) shift ;; esac ;;
+			-t|--table)
+				table="$2"; shift ;;
+			-I|--insert|-A|--append|-C|--check|-D|--delete)
+				cmd="$1"; chain="$2"; shift
+				# A rule number only makes sense for an insert here: a delete
+				# by number can't be matched to one of our rules.
+				case "$cmd:$2" in
+					-I:[0-9]*|--insert:[0-9]*) shift ;;
+				esac ;;
+			-i|--in-interface)
+				iif="$2"; shift ;;
+			-s|--source)
+				src="$2"; shift ;;
+			-d|--destination)
+				dst="$2"; shift ;;
+			-p|--protocol)
+				proto="$2"; shift ;;
+			--dport|--destination-port)
+				dport="$2"; shift ;;
+			-m|--match)
+				case "$2" in tcp|udp) ;; *) other=1 ;; esac
+				shift ;;
+			-j|--jump)
+				target="$2"; shift ;;
+			--to-destination)
+				to="$2"; shift ;;
+			*)
+				other=1 ;;
+		esac
+		shift
+	done
+}
+
+# Values go into an nft command line, so each must look like what it claims
+# to be. Anything else means "not ours" rather than an attempt at escaping.
+valid() {
+	case "$iif" in *[!A-Za-z0-9_.-]*) return 1 ;; esac
+	case "$src$dst" in *[!0-9./]*) return 1 ;; esac
+	case "$proto" in ""|tcp|udp) ;; *) return 1 ;; esac
+	case "$dport" in *[!0-9:]*) return 1 ;; esac
+	case "$to" in ""|*[!0-9.:-]*) return 1 ;; esac
+	# Ports need a transport protocol for nft to know where to look.
+	if [ -z "$proto" ]; then
+		[ -z "$dport" ] || return 1
+		case "$to" in *:*) return 1 ;; esac
+	fi
+	return 0
+}
+
+parse "$@"
+
+case "$chain" in
+	PREROUTING) nchain="prerouting" ;;
+	OUTPUT)     nchain="output" ;;
+	*)          nchain="" ;;
+esac
+
+if [ "$table" != "nat" ] || [ "$target" != "DNAT" ] || [ -z "$cmd" ] ||
+   [ -z "$nchain" ] || [ "$other" = 1 ] || ! valid; then
+	exec "$REAL" "$@"
+fi
+
+# The core deletes with the same arguments it added with, so the arguments
+# themselves identify the rule.
+key="uu $chain ${iif:--} ${src:--} ${dst:--} ${proto:--} ${dport:--} $to"
+
+find_handle() {
+	nft -a list chain ip "$TABLE" "$nchain" 2>/dev/null |
+		awk -v k="comment \"$key\"" 'index($0, k) { sub(/.*# handle /, ""); print; exit }'
+}
+
+case "$cmd" in
+	-C|--check)
+		[ -n "$(find_handle)" ]
+		exit $?
+		;;
+	-D|--delete)
+		h="$(find_handle)"
+		if [ -z "$h" ]; then
+			echo "iptables: Bad rule (does a matching rule exist in that chain?)." >&2
+			exit 1
+		fi
+		nft delete rule ip "$TABLE" "$nchain" handle "$h" || exit 1
+		logger -t uuplugin "DNAT fallback: removed '$key'"
+		exit 0
+		;;
+esac
+
+# Just ahead of iptables' own nat chains (priority -100), as an "-I" there
+# would be.
+nft -f - <<-EOF || exit 1
+	add table ip $TABLE
+	add chain ip $TABLE prerouting { type nat hook prerouting priority -105; policy accept; }
+	add chain ip $TABLE output { type nat hook output priority -105; policy accept; }
+EOF
+
+match=""
+[ -n "$iif" ]   && match="$match iifname \"$iif\""
+[ -n "$src" ]   && match="$match ip saddr $src"
+[ -n "$dst" ]   && match="$match ip daddr $dst"
+if [ -n "$dport" ]; then
+	match="$match $proto dport $(echo "$dport" | tr ':' '-')"
+elif [ -n "$proto" ]; then
+	match="$match meta l4proto $proto"
+fi
+
+case "$cmd" in
+	-I|--insert) verb="insert" ;;
+	*)           verb="add" ;;
+esac
+
+nft "$verb" rule ip "$TABLE" "$nchain" $match counter dnat to "$to" comment "\"$key\"" || exit 1
+logger -t uuplugin "DNAT fallback: added '$key'"
+exit 0

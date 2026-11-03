@@ -109,7 +109,8 @@ function uuRender(d) {
 			'generic':      '<%:standard build - game consoles only%>'
 		}[d.build] || '';
 		h += uuRow('<%:Running%>', '<code>' + (d.arch || '?') + '</code>' +
-			(buildText ? ' <span class="uu-muted">' + buildText + '</span>' : ''));
+			(buildText ? ' <span class="uu-muted">' + buildText + '</span>' : '') +
+			(d.dnat_fallback ? '<br /><span class="uu-muted"><%:iptables here has no DNAT target; nftables handles the UU DNS redirect instead.%></span>' : ''));
 
 		h += uuRow('<%:Tunnel%>', d.tun
 			? '<code>' + d.tun + '</code>'

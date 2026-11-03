@@ -24,6 +24,8 @@ SYNC="/usr/libexec/uuplugin/uu-openclash-sync"
 UA3F_SYNC="/usr/libexec/uuplugin/uu-ua3f-sync"
 DETECT="/usr/libexec/uuplugin/uu-detect"
 VIEW="/usr/libexec/uuplugin/uu-view"
+XT_DIR="/usr/libexec/uuplugin/xt"
+XT_TABLE="uuplugin_nat"
 PRELOAD_DIR="/usr/lib/uuplugin"
 
 # The view filter has to match the plugin's own architecture, not the router's:
@@ -442,6 +444,25 @@ del_firewall_rule() {
 	fi
 }
 
+# ---------------------------------------------------------------- DNAT fallback
+
+# Some firmware ships iptables without the DNAT target (photonicatWrt does).
+# The core needs it for one rule per boosted device, its DNS redirect, and
+# undoes the whole boost when that rule fails. Asked the way the core asks:
+# it runs iptables with XTABLES_LIBDIR=/lib. A missing iptables altogether is
+# a different problem, which this cannot fix, so it counts as a pass here.
+iptables_can_dnat() {
+	command -v iptables >/dev/null 2>&1 || return 0
+	XTABLES_LIBDIR=/lib iptables -j DNAT -h 2>&1 | grep -q -- '--to-destination'
+}
+
+# The rules $XT_DIR/iptables put in nftables on the core's behalf. A core that
+# is stopped never gets to delete them itself.
+dnat_fallback_cleanup() {
+	command -v nft >/dev/null 2>&1 || return 0
+	nft delete table ip "$XT_TABLE" 2>/dev/null
+}
+
 # ---------------------------------------------------------------- service
 
 start_openclash_sync() {
@@ -530,9 +551,11 @@ start_service() {
 
 	# Refuse rather than fight another UU install for /var/run/uuplugin.pid.
 	# Without this procd simply respawns into a crash loop.
-	if [ -x "$DETECT" ]; then
+	local det=""
+	[ -x "$DETECT" ] && det=$(RUN_DIR="$RUN_DIR" "$DETECT")
+	if [ -n "$det" ]; then
 		local foreign
-		foreign=$(RUN_DIR="$RUN_DIR" "$DETECT" | sed -n 's/^foreign=//p')
+		foreign=$(echo "$det" | sed -n 's/^foreign=//p')
 		if [ -n "$foreign" ]; then
 			uu_log "ERROR: another UU installation is already running:"
 			uu_log "  $foreign"
@@ -555,6 +578,23 @@ start_service() {
 
 	if [ ! -e /dev/net/tun ]; then
 		uu_log "WARNING: /dev/net/tun is missing. Install kmod-tun or UU cannot build its tunnel."
+	fi
+
+	# Leftovers from a core that died without cleaning up. Only while no core
+	# runs: a reload comes through here too, and must not pull the rules out
+	# from under an active boost.
+	echo "$det" | grep -q '^ours=[0-9]' || dnat_fallback_cleanup
+
+	local xt_env=""
+	if ! iptables_can_dnat; then
+		if command -v nft >/dev/null 2>&1 && [ -x "$XT_DIR/iptables" ]; then
+			xt_env="PATH=$XT_DIR:/usr/sbin:/usr/bin:/sbin:/bin"
+			uu_log "This firmware's iptables has no DNAT target. UU's DNAT rules"
+			uu_log "  will go to the nftables table '$XT_TABLE' instead."
+		else
+			uu_log "WARNING: this firmware's iptables has no DNAT target, and nft is"
+			uu_log "  not available to stand in. Boosting will fail."
+		fi
 	fi
 
 	# What the plugin is allowed to see. UU enumerates the LAN from the DHCP
@@ -630,6 +670,8 @@ start_service() {
 	else
 		procd_set_param command /bin/sh -c "$inner"
 	fi
+	# The core runs "iptables" by name, so its PATH decides which one it gets.
+	[ -n "$xt_env" ] && procd_set_param env "$xt_env"
 	procd_set_param limits core="unlimited"
 	procd_set_param respawn
 	procd_set_param stdout 1
@@ -654,6 +696,7 @@ start_service() {
 stop_service() {
 	[ -x "$SYNC" ] && "$SYNC" cleanup >/dev/null 2>&1
 	[ -x "$UA3F_SYNC" ] && "$UA3F_SYNC" cleanup >/dev/null 2>&1
+	dnat_fallback_cleanup
 
 	# Only tear the firewall zone down when the service is actually being
 	# turned off. Doing it on every stop meant a restart removed and re-added

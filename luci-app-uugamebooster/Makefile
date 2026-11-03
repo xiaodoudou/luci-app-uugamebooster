@@ -36,6 +36,7 @@ define Package/$(PKG_NAME)/postinst
 #!/bin/sh
 chmod +x /etc/init.d/uuplugin
 chmod +x /usr/libexec/uuplugin/*
+chmod +x /usr/libexec/uuplugin/xt/*
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk

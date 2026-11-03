@@ -89,6 +89,7 @@ FILES = {
     "./usr/libexec/uuplugin/uu-ua3f-sync":          ("root/usr/libexec/uuplugin/uu-ua3f-sync", 0o755),
     "./usr/libexec/uuplugin/uu-detect":             ("root/usr/libexec/uuplugin/uu-detect", 0o755),
     "./usr/libexec/uuplugin/uu-view":               ("root/usr/libexec/uuplugin/uu-view", 0o755),
+    "./usr/libexec/uuplugin/xt/iptables":           ("root/usr/libexec/uuplugin/xt/iptables", 0o755),
     "./usr/lib/lua/luci/controller/uuplugin.lua":   ("luasrc/controller/uuplugin.lua", 0o644),
     "./usr/lib/lua/luci/model/cbi/uuplugin.lua":    ("luasrc/model/cbi/uuplugin.lua", 0o644),
     "./usr/lib/lua/luci/view/uuplugin/uuplugin_status.htm": ("luasrc/view/uuplugin/uuplugin_status.htm", 0o644),
@@ -101,6 +102,7 @@ POSTINST = """#!/bin/sh
 [ -n "${IPKG_INSTROOT}" ] || {
 \tchmod +x /etc/init.d/uuplugin 2>/dev/null
 \tchmod +x /usr/libexec/uuplugin/* 2>/dev/null
+\tchmod +x /usr/libexec/uuplugin/xt/* 2>/dev/null
 \t( . /etc/uci-defaults/45_luci-uuplugin ) && rm -f /etc/uci-defaults/45_luci-uuplugin
 \trm -f /tmp/luci-indexcache /tmp/luci-modulecache/* 2>/dev/null
 \t# An upgrade had to stop the service to replace its files. Put it back the
