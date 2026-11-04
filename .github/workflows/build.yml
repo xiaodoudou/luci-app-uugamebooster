@@ -135,6 +135,15 @@ jobs:
           sh tools/build-preload.sh "${PACKAGE_DIR}/root/usr/lib/uuplugin"
           ls -l "${PACKAGE_DIR}/root/usr/lib/uuplugin/"
 
+      - name: Compile the translation into the package
+        # luci.mk puts the catalogue in a luci-i18n package of its own, which is
+        # never released, so apk installs came up in English. Carried under
+        # root/ it ships in the main package, as it does in mkipk.py's ipk.
+        run: |
+          mkdir -p "${PACKAGE_DIR}/root/usr/lib/lua/luci/i18n"
+          python3 tools/po2lmo.py "${PACKAGE_DIR}/po/zh_Hans/uugamebooster.po" \
+            "${PACKAGE_DIR}/root/usr/lib/lua/luci/i18n/uugamebooster.zh-cn.lmo"
+
       - name: Download the OpenWrt SDK
         run: |
           mkdir -p tmp
@@ -177,8 +186,10 @@ jobs:
         # file is valid input for the real tool and not just for ours.
         run: |
           cd tmp/${{ matrix.target.sdk_dir }}
-          find . -name 'uugamebooster.zh-cn.lmo' -print -quit | grep . \
+          find . -path '*/luci-i18n-uugamebooster-zh-cn/usr/lib/lua/luci/i18n/uugamebooster.zh-cn.lmo' -print -quit | grep . \
             || { echo "no catalogue produced by the SDK build"; exit 1; }
+          find . -path '*/luci-app-uugamebooster/usr/lib/lua/luci/i18n/uugamebooster.zh-cn.lmo' -print -quit | grep . \
+            || { echo "catalogue missing from the main package"; exit 1; }
           find . -name 'uu-view-preload-aarch64.so' -print -quit | grep . \
             || { echo "view filters missing from the SDK build"; exit 1; }
 
