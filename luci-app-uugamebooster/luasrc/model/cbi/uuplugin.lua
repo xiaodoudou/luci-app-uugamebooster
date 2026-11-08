@@ -22,6 +22,7 @@ s:tab("general", translate("General"))
 s:tab("build",   translate("What to boost"))
 s:tab("clash",   translate("OpenClash"))
 s:tab("ua3f",    translate("UA3F"))
+s:tab("homeproxy", translate("HomeProxy"))
 s:tab("devices", translate("Device visibility"))
 s:tab("howto",   translate("How to use"))
 
@@ -156,6 +157,31 @@ o.description = translate(
 	"through UA3F." ..
 	"<br /><strong>Leave UA3F alone</strong> changes nothing." ..
 	"<br />Nothing happens unless UA3F is installed and running.")
+
+-- --------------------------------------------------------------- HomeProxy
+
+o = s:taboption("homeproxy", ListValue, "homeproxy_mode", translate("Coexistence"))
+o:value("cooperative", translate("Split the traffic (recommended)"))
+o:value("off", translate("Leave HomeProxy alone"))
+o.default = "cooperative"
+o.description = translate(
+	"HomeProxy runs sing-box, which intercepts LAN traffic from a table of " ..
+	"its own. With a TUN inbound and auto-redirect, its <code>tcp redirect</code> " ..
+	"rewrites a connection's destination before any routing decision is made, " ..
+	"so a boosted device's game connections land on the proxy instead of UU's " ..
+	"tunnel. Its UDP is unaffected - routing already prefers UU - which is why " ..
+	"some games look fine while others will not connect at all." ..
+	"<br /><br /><strong>Split the traffic</strong> returns the destinations UU " ..
+	"routes, plus DNS, from the top of HomeProxy's chains, for boosted devices " ..
+	"only. Everything else from that device keeps going through the proxy, so " ..
+	"the store, downloads and streaming still work." ..
+	"<br />DNS is exempted separately and without a destination, because " ..
+	"HomeProxy would otherwise resolve game names through the proxy exit and " ..
+	"hand UU addresses it does not route." ..
+	"<br /><br />Polling interval and the widest allowed route come from the " ..
+	"OpenClash tab, which every coexistence daemon shares." ..
+	"<br /><strong>Leave HomeProxy alone</strong> changes nothing." ..
+	"<br />Nothing happens unless HomeProxy is installed.")
 
 -- ------------------------------------------------------------ device list
 

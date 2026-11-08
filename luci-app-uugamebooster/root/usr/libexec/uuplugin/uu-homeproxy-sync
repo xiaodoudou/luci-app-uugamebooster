@@ -1,0 +1,210 @@
+#!/bin/sh
+# uu-homeproxy-sync - keep a boosted device's game traffic out of HomeProxy.
+#
+# Usage: uu-homeproxy-sync <cooperative|cleanup>
+#
+# HomeProxy runs sing-box, which hijacks LAN traffic from a table of its own,
+# inet sing-box. With a TUN inbound and auto_redirect enabled, two chains in
+# that table matter:
+#
+#   prerouting_prematch  filter  priority dstnat - 1  queues TCP to NFQUEUE
+#   prerouting           nat     priority dstnat + 2  th dport 53 dnat to <tun>
+#                                                     tcp redirect to :<port>
+#
+# and one more filter chain at dstnat + 3 that marks UDP/ICMP.
+#
+# WHY ONLY TCP BREAKS
+# -------------------
+# UU DNATs a boosted device's DNS to 8.8.8.8 from its own nat chain at priority
+# dstnat (-100), which runs before both of sing-box's. UU's policy routing is
+# "from <device> lookup 179" at pref 0, ahead of the marks sing-box sets. So a
+# game's UDP reaches UU's tunnel even while sing-box is running - that part
+# already works.
+#
+# TCP does not. sing-box's `tcp redirect` rewrites the destination in nat,
+# before any route lookup happens, so the connection lands on sing-box's own
+# listener and UU's ip rule never gets consulted. Measured on a live router:
+# every TCP connection from the boosted console came back from the proxy's
+# port, while its UDP was going into tun163 the whole time.
+#
+# So the exemption only has to cover the redirect, which is what the two chains
+# below are: the same "boosted device AND a destination UU routes" return as
+# the OpenClash integration, inserted at the top of both.
+#
+# WHY DNS IS EXEMPTED SEPARATELY
+# ------------------------------
+# This one cannot be destination-scoped. sing-box rewrites port 53 to its DNS
+# server on the TUN peer. Let it and the console resolves game names through
+# the proxy exit, which answers with addresses from the wrong CDN region -
+# addresses UU does not route - so the boost silently stops working even though
+# every rule looks right. That is precisely what UU's own DNS DNAT is for, so
+# port 53 returns unconditionally for a boosted device.
+#
+# WHY EVERY PASS REBUILDS
+# -----------------------
+# sing-box regenerates its whole table on each start and on subscription
+# updates (utpl ... | nft -f -), taking our sets and rules with it while our
+# signature file survives. Trusting the signature alone would leave the sets
+# empty and the exemption matching nothing, so the sets themselves are checked
+# on every pass and refilled when missing.
+
+MODE="${1:-cooperative}"
+LOG_TAG="uu-homeproxy"
+. /usr/libexec/uuplugin/uu-lib.sh
+
+TABLE="sing-box"
+SET_SRC="uu_boosted"
+SET_DST="uu_dests"
+TAG_DST="uu-hp-dest"
+TAG_DNS="uu-hp-dns"
+STATE="/var/run/uu-homeproxy.state"
+SIG="/var/run/uu-homeproxy.sig"
+NFT_TMP="/tmp/.uu-homeproxy.nft"
+
+# Both chains are needed - the filter one decides what gets queued, the nat one
+# is where the redirect sits - but act on whichever this version has, so a
+# renamed chain in a future sing-box degrades to a partial exemption rather
+# than a silent no-op.
+hp_chains() {
+	local c
+	for c in prerouting_prematch prerouting; do
+		nft list chain inet "$TABLE" "$c" >/dev/null 2>&1 && echo "$c"
+	done
+}
+
+hp_up() {
+	nft list chain inet "$TABLE" prerouting >/dev/null 2>&1 ||
+		nft list chain inet "$TABLE" prerouting_prematch >/dev/null 2>&1
+}
+
+have_sets() { nft list set inet "$TABLE" "$SET_DST" >/dev/null 2>&1; }
+
+# Sets have to live in sing-box's table: a rule cannot reference another
+# table's. auto-merge is not optional here either - UU's prefix lists overlap
+# each other and an interval set rejects a conflicting element outright, which
+# is what an unmerged load of its routes fails on.
+add_sets() {
+	nft add set inet "$TABLE" "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
+	nft add set inet "$TABLE" "$SET_DST" '{ type ipv4_addr; flags interval; auto-merge; }' 2>/dev/null
+}
+
+has_tag() { nft list chain inet "$TABLE" "$1" 2>/dev/null | grep -q "$2"; }
+
+add_rules() {
+	local c
+	for c in $(hp_chains); do
+		has_tag "$c" "$TAG_DST" || nft insert rule inet "$TABLE" "$c" \
+			ip saddr @$SET_SRC ip daddr @$SET_DST counter return \
+			comment "\"$TAG_DST\"" 2>/dev/null
+		has_tag "$c" "$TAG_DNS" || nft insert rule inet "$TABLE" "$c" \
+			ip saddr @$SET_SRC udp dport 53 counter return \
+			comment "\"$TAG_DNS\"" 2>/dev/null
+	done
+}
+
+# Rule first: a set still referenced by a rule cannot be deleted.
+del_all() {
+	local c h
+	for c in $(hp_chains); do
+		for h in $(nft -a list chain inet "$TABLE" "$c" 2>/dev/null |
+		           grep -E "$TAG_DST|$TAG_DNS" |
+		           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+			nft delete rule inet "$TABLE" "$c" handle "$h" 2>/dev/null
+		done
+	done
+	nft delete set inet "$TABLE" "$SET_SRC" 2>/dev/null
+	nft delete set inet "$TABLE" "$SET_DST" 2>/dev/null
+}
+
+# Both sets in one nft run, chunked: UU can route thousands of prefixes.
+apply_sets() {
+	local ips="$1" prefixes="$2" n=0 line="" p
+	{
+		echo "flush set inet $TABLE $SET_SRC"
+		[ -n "$ips" ] && echo "add element inet $TABLE $SET_SRC { $(echo $ips | tr ' ' ',') }"
+		echo "flush set inet $TABLE $SET_DST"
+		for p in $prefixes; do
+			line="${line:+$line,}$p"
+			n=$((n + 1))
+			if [ "$n" -ge 2000 ]; then
+				echo "add element inet $TABLE $SET_DST { $line }"
+				line=""; n=0
+			fi
+		done
+		[ -n "$line" ] && echo "add element inet $TABLE $SET_DST { $line }"
+	} > "$NFT_TMP"
+	nft -f "$NFT_TMP" 2>/dev/null
+}
+
+cleanup() {
+	del_all
+	rm -f "$STATE" "$SIG" "$NFT_TMP"
+	log "HomeProxy exemptions removed."
+}
+
+run_cooperative() {
+	local ips prefixes sig prev up=""
+
+	: > "$STATE"
+	while :; do
+		if ! hp_up; then
+			# HomeProxy stopped, or is rebuilding its table: our sets went with
+			# it, so the next pass that finds it back has to refill them.
+			[ "$up" = "1" ] && log "HomeProxy's table is gone; waiting for it."
+			up=0
+			rm -f "$SIG"
+			: > "$STATE"
+			nap "$INTERVAL"
+			continue
+		fi
+		[ "$up" = "1" ] || log "HomeProxy found (poll: ${INTERVAL}s, min prefix: /$MINPFX)."
+		up=1
+
+		ips="$(boosted_ips)"
+		if [ -z "$ips" ]; then
+			if [ -s "$SIG" ] || have_sets; then
+				log "No devices boosted; removing HomeProxy exemptions."
+				del_all
+				rm -f "$SIG"
+				: > "$STATE"
+			fi
+			nap "$INTERVAL"
+			continue
+		fi
+
+		prefixes="$(collect_prefixes $(find_tuns))"
+		sig="$(printf '%s|%s' "$ips" "$prefixes" | md5sum | awk '{print $1}')"
+		prev="$(cat "$SIG" 2>/dev/null)"
+
+		# Rebuild the sets whenever they are gone, whatever the signature says:
+		# a sing-box reload drops them but leaves the signature behind.
+		if ! have_sets; then
+			add_sets
+			prev=""
+		fi
+		add_rules
+
+		if [ "$sig" != "$prev" ]; then
+			if apply_sets "$ips" "$prefixes"; then
+				echo "$sig" > "$SIG"
+				if [ -n "$prefixes" ]; then
+					printf '%s\n' "$prefixes" > "$STATE"
+				else
+					: > "$STATE"
+				fi
+				log "Boosted: $(echo $ips | tr '\n' ' ')- exempting" \
+				    "$(echo "$prefixes" | grep -c .) destination prefix(es) and DNS from HomeProxy."
+			else
+				err "Failed to apply nftables sets (see $NFT_TMP)."
+			fi
+		fi
+
+		nap "$INTERVAL"
+	done
+}
+
+case "$MODE" in
+	cleanup)     cleanup ;;
+	cooperative) trap 'cleanup; exit 0' INT TERM; run_cooperative ;;
+	*)           err "Unknown mode '$MODE'"; exit 1 ;;
+esac
