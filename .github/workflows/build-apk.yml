@@ -41,7 +41,7 @@ jobs:
 
       - name: Build the view-filter shims
         run: |
-          tools/build-preload.sh payload/preload
+          sh tools/build-preload.sh payload/preload
           mkdir -p luci-app-uugamebooster/root/usr/lib/uuplugin
           cp payload/preload/*.so luci-app-uugamebooster/root/usr/lib/uuplugin/
           ls -la luci-app-uugamebooster/root/usr/lib/uuplugin/
