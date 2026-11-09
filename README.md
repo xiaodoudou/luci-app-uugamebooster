@@ -125,7 +125,6 @@ Each of these got its own page, because each one turned out to need it:
 | [Running alongside UA3F](docs/ua3f.md) | Keeping game connections out of UA3F's User-Agent rewriting — and the hook priority that decides whether UA3F does anything at all |
 | [Running alongside HomeProxy](docs/homeproxy.md) | Why only TCP breaks under sing-box, and how the redirect is routed around without dropping the device off the proxy |
 | [Firewall](docs/firewall.md) | The `tun16+` zone, and why it survives a restart |
-| [Rebuilding after a reset](docs/recovery.md) | What lives in the package and what does not, and how to put the rest back on a freshly reset router |
 | [Conflicts with an existing UU install](docs/existing-install.md) | Taking over from NetEase's own installer script |
 | [What has actually been tested](docs/testing.md) | What was checked on a live router, and what wasn't |
 
