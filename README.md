@@ -26,6 +26,7 @@ What this fork adds:
 - **PC and phone boosting**, not just consoles. Runs natively on ARM routers, emulated on x86_64.
 - **Coexistence with OpenClash.** The two split the traffic instead of one of them quietly winning.
 - **Coexistence with UA3F.** Game traffic skips its User-Agent rewriting, everything else still goes through it.
+- **Coexistence with HomeProxy** in TUN mode. Game traffic and DNS skip sing-box's redirect, everything else stays on the proxy.
 - **As fast as UU's own PC client**, measured: 25 ms vs 25-27 ms on CS2 through Hong Kong.
 - **A device list**, so the UU app only sees the devices you pick.
 - **English and Chinese UI**, following LuCI's language setting.
@@ -96,7 +97,7 @@ make defconfig && make package/luci-app-uugamebooster/compile V=s
 3. Wait for the status panel to say **Ready**. Before that the app can't find your router, even though the service is already running.
 4. Follow the **How to use** tab: install the app, bind the router, pick a device
 
-Settings are split across six tabs (General, What to boost, OpenClash, UA3F, Device visibility, How to use). The panel above them shows how far along the service is, which build is running, the tunnel devices, and what's being boosted.
+Settings are split across seven tabs (General, What to boost, OpenClash, UA3F, HomeProxy, Device visibility, How to use). The panel above them shows how far along the service is, which build is running, the tunnel devices, and what's being boosted.
 
 ### Language
 
@@ -122,6 +123,7 @@ Each of these got its own page, because each one turned out to need it:
 | [Device visibility](docs/device-list.md) | Keeping the UU app from listing every host you own, and why the ARP table can't be filtered the obvious way |
 | [Running alongside OpenClash](docs/openclash.md) | What actually leaves the proxy for a boosted device, measured rather than guessed |
 | [Running alongside UA3F](docs/ua3f.md) | Keeping game connections out of UA3F's User-Agent rewriting, without taking the rest of the device with them |
+| [Running alongside HomeProxy](docs/homeproxy.md) | Why only TCP breaks under sing-box, and how the redirect is routed around without dropping the device off the proxy |
 | [Firewall](docs/firewall.md) | The `tun16+` zone, and why it survives a restart |
 | [Conflicts with an existing UU install](docs/existing-install.md) | Taking over from NetEase's own installer script |
 | [What has actually been tested](docs/testing.md) | What was checked on a live router, and what wasn't |

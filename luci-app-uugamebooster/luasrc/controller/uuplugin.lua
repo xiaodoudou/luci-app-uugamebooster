@@ -88,6 +88,13 @@ function act_status()
 	e.ua3f_mode = uci:get_first("uuplugin", "uuplugin", "ua3f_mode") or "cooperative"
 	e.ua3f_exempted = lines("/var/run/uu-ua3f.state")
 
+	-- HomeProxy integration state, same terms as UA3F's
+	e.homeproxy_installed = fs.access("/etc/config/homeproxy")
+	e.homeproxy_running = det:match("homeproxy=%S") ~= nil
+	e.homeproxy_tun = det:match("homeproxy=tun") ~= nil
+	e.homeproxy_mode = uci:get_first("uuplugin", "uuplugin", "homeproxy_mode") or "cooperative"
+	e.homeproxy_exempted = lines("/var/run/uu-homeproxy.state")
+
 	-- UU creates one TUN per boosted device (tun163, tun164, ...), so list them all
 	local tun = sys.exec("ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d'@' -f1 | grep -E '^tun' | grep -v '^utun' | tr '\\n' ' '")
 	e.tun = tun and tun:gsub("%s+$", "") or ""

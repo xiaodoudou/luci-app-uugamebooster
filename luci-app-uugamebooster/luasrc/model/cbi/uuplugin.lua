@@ -22,6 +22,7 @@ s:tab("general", translate("General"))
 s:tab("build",   translate("What to boost"))
 s:tab("clash",   translate("OpenClash"))
 s:tab("ua3f",    translate("UA3F"))
+s:tab("homeproxy", translate("HomeProxy"))
 s:tab("devices", translate("Device visibility"))
 s:tab("howto",   translate("How to use"))
 
@@ -156,6 +157,26 @@ o.description = translate(
 	"through UA3F." ..
 	"<br /><strong>Leave UA3F alone</strong> changes nothing." ..
 	"<br />Nothing happens unless UA3F is installed and running.")
+
+-- --------------------------------------------------------------- HomeProxy
+
+o = s:taboption("homeproxy", ListValue, "homeproxy_mode", translate("Coexistence"))
+o:value("cooperative", translate("Keep game traffic out of HomeProxy (recommended)"))
+o:value("off", translate("Leave HomeProxy alone"))
+o.default = "cooperative"
+o.description = translate(
+	"With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to " ..
+	"sing-box before UU can route it, so a boosted device's game connections " ..
+	"fail while its UDP still works." ..
+	"<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the " ..
+	"game servers UU routes into its tunnel, and the device's DNS, only for " ..
+	"boosted devices. Everything else from that device still goes through " ..
+	"HomeProxy." ..
+	"<br /><strong>Leave HomeProxy alone</strong> changes nothing." ..
+	"<br /><br />HomeProxy's other modes are not handled. There, add the device " ..
+	"under HomeProxy's Access Control, with <em>Proxy all except listed</em>; " ..
+	"it then skips HomeProxy entirely." ..
+	"<br />The polling interval and widest route come from the OpenClash tab.")
 
 -- ------------------------------------------------------------ device list
 

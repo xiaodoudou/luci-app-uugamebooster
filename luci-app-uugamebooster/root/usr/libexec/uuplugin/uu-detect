@@ -81,6 +81,12 @@ done
 ua3f=""
 nft list table inet UA3F >/dev/null 2>&1 && ua3f="1"
 
+# "tun" when sing-box's own table is up, the only HomeProxy mode
+# uu-homeproxy-sync handles; its other modes hook fw4 and stay "1".
+homeproxy=""
+ubus call service list '{"name":"homeproxy"}' 2>/dev/null | grep -q '"running": true' && homeproxy="1"
+nft list table inet sing-box >/dev/null 2>&1 && homeproxy="tun"
+
 # Devices UU is boosting right now.
 #
 # UU adds a policy routing rule per boosted device ("from <ip> lookup <table>")
@@ -193,6 +199,7 @@ echo "dnat=$dnat"
 echo "foreign=$foreign"
 echo "openclash=$openclash"
 echo "ua3f=$ua3f"
+echo "homeproxy=$homeproxy"
 echo "boosted=${boosted% }"
 echo "blocked=${blocked# }"
 
