@@ -1,0 +1,201 @@
+#!/bin/sh
+# uu-passwall-sync - let UU and PassWall share the same LAN.
+#
+# Usage: uu-passwall-sync <cooperative|off|cleanup>
+#
+# WHY THIS EXISTS
+# ---------------
+# UU and PassWall do not fight over netfilter the way UU and OpenClash do. UU
+# steers a boosted device with its own policy routing - "from <ip> lookup 179"
+# for the game prefixes, "from <ip> fwmark 0x163 lookup 163" for everything it
+# marks - and those rules sit at a lower priority number than PassWall's
+# "fwmark 0x50535731 lookup 999". So a game destination is routed into UU's
+# tunnel and everything else falls through to PassWall's tproxy, in that order,
+# with no help from anyone. That is why an OpenClash-style traffic split is not
+# needed here.
+#
+# The one real conflict is DNS. For every boosted device the OEM core installs:
+#
+#   iptables  -t nat -I PREROUTING -i <lan> -s <ip> -p udp --dport 53 \
+#             -j DNAT --to-destination 8.8.8.8
+#   ip6tables -t filter -I INPUT   -i <lan> -p udp --dport 53 \
+#             -m mac --mac-source <mac> -j DROP
+#   ip6tables -t filter -I FORWARD ... -j DROP
+#
+# The DNAT is load-bearing: the core verifies it was accepted and rolls the
+# whole boost back when it was not. It is also how UU keeps the game client on
+# an address it has a route for - its list of destinations is a static prefix
+# table, so it has to control what the client resolves.
+#
+# With PassWall in the picture that redirect is actively harmful. The query goes
+# into the game tunnel instead of PassWall's resolver chain (dnsmasq ->
+# chinadns-ng -> sing-box), where it is answered from the wrong place or simply
+# dropped. The IPv6 DROP is worse: it exists because UU has no IPv6 tunnel, and
+# it is never removed when the boost stops, so one session of gaming leaves that
+# device's IPv6 resolution broken until the next reboot.
+#
+# WHAT THIS DOES
+# --------------
+# Keeps a RETURN in front of the DNAT for queries aimed at the router itself, so
+# a boosted device keeps resolving through PassWall; and removes the IPv6 DROP
+# rules. UU only checks that its DNAT rule was accepted, not that packets reach
+# it, so acceleration is untouched - measured on an IPQ60xx with the tunnel
+# carrying traffic while this was in place.
+#
+# Only the router's own address is exempted, not all of port 53: a query aimed
+# somewhere else still takes UU's redirect, exactly as before.
+
+MODE="${1:-cooperative}"
+LOG_TAG="uu-passwall"
+. /usr/libexec/uuplugin/uu-lib.sh
+
+STATE="/var/run/uu-passwall.state"
+IPT="iptables -w"
+IP6T="ip6tables -w"
+
+lan_if() {
+	local dev
+	dev="$(uci -q get network.lan.device)"
+	[ -n "$dev" ] || dev="$(uci -q get network.lan.ifname)"
+	[ -n "$dev" ] || dev="br-lan"
+	echo "${dev%% *}"
+}
+
+lan_ip() {
+	local ip
+	ip="$(uci -q get network.lan.ipaddr)"
+	ip="${ip%%/*}"
+	[ -n "$ip" ] || ip="$(ip -4 addr show "$(lan_if)" 2>/dev/null |
+		awk '/inet / { sub(/\/.*/, "", $2); print $2; exit }')"
+	echo "$ip"
+}
+
+# delete every copy of our rule for one device. Draining by repetition rather
+# than counting: a reload or two leaves more than one behind.
+del_exempt() {
+	local ip="$1"
+	[ -n "$LANIP" ] || return 0
+	while $IPT -t nat -C PREROUTING -i "$LANIF" -s "$ip" -d "$LANIP" \
+		-p udp --dport 53 -j RETURN 2>/dev/null; do
+		$IPT -t nat -D PREROUTING -i "$LANIF" -s "$ip" -d "$LANIP" \
+			-p udp --dport 53 -j RETURN 2>/dev/null || break
+	done
+	return 0
+}
+
+# Is our RETURN the first rule this device's DNS query meets? Presence is not
+# enough: UU inserts its own rule at position 1 every time it starts a boost,
+# which pushes ours down and makes it unreachable. Only the order relative to
+# the same device's DNAT matters, so the scan stops at the first rule naming
+# that device.
+exempt_first() {
+	local ip="$1" line
+	line=$($IPT -t nat -S PREROUTING 2>/dev/null | awk -v ip="$ip" '
+		$1 == "-A" && $0 ~ ("-s " ip "[ /]") && $0 ~ /dport 53/ { print; exit }')
+	case "$line" in
+		*RETURN*) return 0 ;;
+	esac
+	return 1
+}
+
+ensure_exempt() {
+	local ip="$1"
+	exempt_first "$ip" && return 0
+	del_exempt "$ip"
+	$IPT -t nat -I PREROUTING 1 -i "$LANIF" -s "$ip" -d "$LANIP" \
+		-p udp --dport 53 -j RETURN 2>/dev/null || return 1
+	log "DNS exemption in place for $ip"
+	return 0
+}
+
+# Delete the IPv6 DNS DROP rules UU installs per boosted MAC. Matched on shape
+# rather than on a specific MAC: a device that has been unplugged and come back
+# with a new address would otherwise leave its old rule behind forever.
+purge_v6_drop() {
+	local chain="$1" nums n
+	nums="$($IP6T -t filter -S "$chain" 2>/dev/null |
+		awk '/^-A / {
+			n++
+			if ($0 ~ /--dport 53/ && $0 ~ /-j DROP/ && $0 ~ /--mac-source/)
+				print n
+		}' | sort -rn)"
+	[ -n "$nums" ] || return 0
+	for n in $nums; do
+		$IP6T -t filter -D "$chain" "$n" 2>/dev/null && \
+			log "removed IPv6 DNS block #$n from $chain"
+	done
+	return 0
+}
+
+cleanup() {
+	local ip
+	for ip in $(cat "$STATE" 2>/dev/null) $(boosted_ips); do
+		del_exempt "$ip"
+	done
+	purge_v6_drop INPUT
+	purge_v6_drop FORWARD
+	rm -f "$STATE"
+}
+
+scan() {
+	local ip
+	: > "$STATE.tmp"
+	for ip in $(boosted_ips); do
+		ensure_exempt "$ip" && echo "$ip" >> "$STATE.tmp"
+	done
+	mv -f "$STATE.tmp" "$STATE"
+	purge_v6_drop INPUT
+	purge_v6_drop FORWARD
+	return 0
+}
+
+# Independent of oc_interval: that one belongs to the OpenClash tab, and moving
+# one slider must not silently retime the other. Re-read every round so a Save
+# & Apply takes effect without restarting the service.
+pws_interval() {
+	local n
+	n="$(uci -q get uuplugin.@uuplugin[0].passwall_interval 2>/dev/null)"
+	case "$n" in ''|*[!0-9]*) n=5 ;; esac
+	[ "$n" -ge 1 ] && [ "$n" -le 60 ] || n=5
+	echo "$n"
+}
+
+# ---------------------------------------------------------------- entry point
+
+LANIF="$(lan_if)"
+LANIP="$(lan_ip)"
+
+case "$MODE" in
+	off|cleanup)
+		cleanup
+		exit 0
+		;;
+esac
+
+[ -f /etc/config/passwall ] || exit 0
+
+if [ -z "$LANIP" ]; then
+	err "cannot work out the LAN address; leaving UU's DNS redirect alone"
+	exit 1
+fi
+
+# iptables-nft takes -w; a busybox build or a vendor iptables may not.
+if ! $IPT -t nat -S PREROUTING >/dev/null 2>&1; then
+	IPT="iptables"
+	IP6T="ip6tables"
+	if ! $IPT -t nat -S PREROUTING >/dev/null 2>&1; then
+		err "iptables cannot read its own nat table; leaving UU alone"
+		exit 1
+	fi
+fi
+
+# A restart must not pull the exemption out from under the device it protects,
+# so nothing is cleaned up on TERM. Only an explicit "cleanup" (the service
+# being switched off) removes the rules.
+trap 'exit 0' TERM INT
+
+log "PassWall coexistence: exempting $LANIP from UU's DNS redirect (lan=$LANIF)"
+while :; do
+	scan
+	nap "$(pws_interval)"
+done

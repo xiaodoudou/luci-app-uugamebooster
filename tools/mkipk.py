@@ -87,6 +87,7 @@ FILES = {
     "./usr/libexec/uuplugin/uu-lib.sh":             ("root/usr/libexec/uuplugin/uu-lib.sh", 0o644),
     "./usr/libexec/uuplugin/uu-openclash-sync":     ("root/usr/libexec/uuplugin/uu-openclash-sync", 0o755),
     "./usr/libexec/uuplugin/uu-ua3f-sync":          ("root/usr/libexec/uuplugin/uu-ua3f-sync", 0o755),
+    "./usr/libexec/uuplugin/uu-passwall-sync":      ("root/usr/libexec/uuplugin/uu-passwall-sync", 0o755),
     "./usr/libexec/uuplugin/uu-homeproxy-sync":     ("root/usr/libexec/uuplugin/uu-homeproxy-sync", 0o755),
     "./usr/libexec/uuplugin/uu-detect":             ("root/usr/libexec/uuplugin/uu-detect", 0o755),
     "./usr/libexec/uuplugin/uu-view":               ("root/usr/libexec/uuplugin/uu-view", 0o755),

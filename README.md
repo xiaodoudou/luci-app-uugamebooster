@@ -26,6 +26,7 @@ What this fork adds:
 - **PC and phone boosting**, not just consoles. Runs natively on ARM routers, emulated on x86_64.
 - **Coexistence with OpenClash.** The two split the traffic instead of one of them quietly winning.
 - **Coexistence with UA3F.** Game traffic skips its User-Agent rewriting, everything else still goes through it.
+- **Coexistence with PassWall.** Game traffic already routes into UU's tunnel on its own; what collides is DNS, and that is pushed out of the way so a boosted device keeps resolving through PassWall. See [docs/passwall.md](docs/passwall.md).
 - **Coexistence with HomeProxy** in TUN mode. Game traffic and DNS skip sing-box's redirect, everything else stays on the proxy.
 - **As fast as UU's own PC client**, measured: 25 ms vs 25-27 ms on CS2 through Hong Kong.
 - **A device list**, so the UU app only sees the devices you pick.

@@ -82,6 +82,13 @@ function act_status()
 	-- Number of destination prefixes currently diverted away from OpenClash
 	e.bypassed = lines("/var/run/uu-openclash.state")
 
+	-- PassWall integration state. Only the exempted device count is worth
+	-- showing: PassWall needs no traffic split, so there is nothing to report
+	-- beyond "its DNS is protected".
+	e.passwall_installed = fs.access("/etc/config/passwall")
+	e.passwall_mode = uci:get_first("uuplugin", "uuplugin", "passwall_mode") or "cooperative"
+	e.passwall_exempted = lines("/var/run/uu-passwall.state")
+
 	-- UA3F integration state, and the prefixes kept out of it
 	e.ua3f_installed = fs.access("/etc/config/ua3f")
 	e.ua3f_running = det:match("ua3f=1") ~= nil
