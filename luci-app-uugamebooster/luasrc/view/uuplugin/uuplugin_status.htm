@@ -157,14 +157,15 @@ function uuRender(d) {
 			}
 		}
 
-		if (!hp) {
-			h += uuRow('<%:HomeProxy%>', '<span class="uu-muted"><%:not installed%></span>', true);
-		} else {
-			var hpcoop = (d.homeproxy_mode == 'cooperative') && d.homeproxy_running;
+		if (hp) {
+			var hpoff = (d.homeproxy_mode == 'off');
+			var hpcoop = !hpoff && d.homeproxy_tun;
 			h += uuRow('<%:HomeProxy%>', (d.homeproxy_running
 				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
 				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>') +
-				(d.homeproxy_mode == 'off' ? ' <span class="uu-muted">&ndash; <%:left alone%></span>' : ''),
+				(hpoff ? ' <span class="uu-muted">&ndash; <%:left alone%></span>'
+				: (d.homeproxy_running && !d.homeproxy_tun)
+				? '<br /><span class="uu-muted"><%:Only its TUN mode with auto-redirect is handled. See the HomeProxy tab.%></span>' : ''),
 				!hpcoop);
 
 			if (hpcoop) {

@@ -29,7 +29,7 @@ LUCI_PKGARCH:=all
 
 PKG_NAME:=luci-app-uugamebooster
 PKG_VERSION:=2.3.1
-PKG_RELEASE:=2
+PKG_RELEASE:=1
 PKG_MAINTAINER:=Fork of lmq8267/luci-app-uugamebooster
 
 define Package/$(PKG_NAME)/postinst

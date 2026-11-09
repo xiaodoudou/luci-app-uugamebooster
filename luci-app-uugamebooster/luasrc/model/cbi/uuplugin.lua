@@ -161,27 +161,22 @@ o.description = translate(
 -- --------------------------------------------------------------- HomeProxy
 
 o = s:taboption("homeproxy", ListValue, "homeproxy_mode", translate("Coexistence"))
-o:value("cooperative", translate("Split the traffic (recommended)"))
+o:value("cooperative", translate("Keep game traffic out of HomeProxy (recommended)"))
 o:value("off", translate("Leave HomeProxy alone"))
 o.default = "cooperative"
 o.description = translate(
-	"HomeProxy runs sing-box, which intercepts LAN traffic from a table of " ..
-	"its own. With a TUN inbound and auto-redirect, its <code>tcp redirect</code> " ..
-	"rewrites a connection's destination before any routing decision is made, " ..
-	"so a boosted device's game connections land on the proxy instead of UU's " ..
-	"tunnel. Its UDP is unaffected - routing already prefers UU - which is why " ..
-	"some games look fine while others will not connect at all." ..
-	"<br /><br /><strong>Split the traffic</strong> returns the destinations UU " ..
-	"routes, plus DNS, from the top of HomeProxy's chains, for boosted devices " ..
-	"only. Everything else from that device keeps going through the proxy, so " ..
-	"the store, downloads and streaming still work." ..
-	"<br />DNS is exempted separately and without a destination, because " ..
-	"HomeProxy would otherwise resolve game names through the proxy exit and " ..
-	"hand UU addresses it does not route." ..
-	"<br /><br />Polling interval and the widest allowed route come from the " ..
-	"OpenClash tab, which every coexistence daemon shares." ..
+	"With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to " ..
+	"sing-box before UU can route it, so a boosted device's game connections " ..
+	"fail while its UDP still works." ..
+	"<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the " ..
+	"game servers UU routes into its tunnel, and the device's DNS, only for " ..
+	"boosted devices. Everything else from that device still goes through " ..
+	"HomeProxy." ..
 	"<br /><strong>Leave HomeProxy alone</strong> changes nothing." ..
-	"<br />Nothing happens unless HomeProxy is installed.")
+	"<br /><br />HomeProxy's other modes are not handled. There, add the device " ..
+	"under HomeProxy's Access Control, with <em>Proxy all except listed</em>; " ..
+	"it then skips HomeProxy entirely." ..
+	"<br />The polling interval and widest route come from the OpenClash tab.")
 
 -- ------------------------------------------------------------ device list
 

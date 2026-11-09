@@ -90,7 +90,8 @@ function act_status()
 
 	-- HomeProxy integration state, same terms as UA3F's
 	e.homeproxy_installed = fs.access("/etc/config/homeproxy")
-	e.homeproxy_running = det:match("homeproxy=1") ~= nil
+	e.homeproxy_running = det:match("homeproxy=%S") ~= nil
+	e.homeproxy_tun = det:match("homeproxy=tun") ~= nil
 	e.homeproxy_mode = uci:get_first("uuplugin", "uuplugin", "homeproxy_mode") or "cooperative"
 	e.homeproxy_exempted = lines("/var/run/uu-homeproxy.state")
 

@@ -1,10 +1,8 @@
 # Running alongside HomeProxy
 
-HomeProxy runs sing-box, which grabs LAN traffic the same way UU does. Left alone the two collide, and the collision is lopsided: **UDP keeps working while every TCP connection fails**, so a console shows "connected" in the app, gets into some menus, and then cannot matchmake.
+[HomeProxy](https://github.com/immortalwrt/homeproxy) runs sing-box. In builds where it uses sing-box's TUN inbound with `auto_redirect`, the two collide lopsidedly: **UDP keeps working while every TCP connection fails**, so a console shows "connected" in the app, gets into some menus, and then cannot matchmake.
 
-## Why PC works and a console does not
-
-The UU **PC** client hooks individual game *processes* through the Windows Filtering Platform, so only game sockets go to the tunnel; the rest of the machine uses the proxy as usual. A router has no processes to hook, only packets, so a console needs the router to take it over whole - and that is where HomeProxy is in the way.
+This page covers that mode only. Official HomeProxy's redirect and TPROXY modes hook fw4 instead, and the plugin leaves them alone (see [Other HomeProxy modes](#other-homeproxy-modes)).
 
 ## What actually breaks: TCP, and only TCP
 
@@ -67,13 +65,24 @@ The first line of the chain should be the `uu-hp-dns` return, then `uu-hp-dest`.
 
 ## Status page
 
-The status panel at the top of the plugin's page shows HomeProxy the same way it shows OpenClash and UA3F: whether it is installed, whether its table is up, and - while a device is boosted and the mode is cooperative - how many game destinations are currently exempted from it.
+When HomeProxy is installed, the status panel shows whether it is running and, in TUN mode, how many game destinations are currently exempted from it. In any other mode it says that mode isn't handled.
 
 ## Modes
 
 | Mode | What happens |
 |---|---|
-| **Split the traffic** (default) | Game destinations and DNS take the UU tunnel. Everything else from that device keeps using HomeProxy. |
+| **Keep game traffic out of HomeProxy** (default) | Game destinations and DNS take the UU tunnel. Everything else from that device keeps using HomeProxy. |
 | **Leave HomeProxy alone** | Nothing gets touched. |
 
-There is no whole-device bypass mode: unlike OpenClash, HomeProxy has no device access-control list in current versions (`lan_whitelist_mode` is present in some configs but is read by nothing), so there is nothing to edit and nothing to restore.
+## Other HomeProxy modes
+
+Official HomeProxy defaults to "Redirect TCP + TProxy UDP", with its rules in fw4's chains rather than a table of sing-box's own. The plugin doesn't touch those, and the status panel says so while HomeProxy is running. There, HomeProxy's own Access Control does the job for a whole device: set *Proxy filter mode* to *Proxy all except listed* and add the console under *Direct IPv4 IP-s* or *Direct MAC-s*. The device then skips HomeProxy entirely, not just for games.
+
+Some HomeProxy builds offer only TUN and have no such list, which is where the split above comes in.
+
+## Limits
+
+- **IPv4 only**, like the OpenClash split.
+- **Tested by one user**, on ImmortalWrt with sing-box 1.15 and a Nintendo Switch. Not run on the maintainer's routers.
+
+[← back to the README](../README.md)

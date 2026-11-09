@@ -3,50 +3,21 @@
 #
 # Usage: uu-homeproxy-sync <cooperative|cleanup>
 #
-# HomeProxy runs sing-box, which hijacks LAN traffic from a table of its own,
-# inet sing-box. With a TUN inbound and auto_redirect enabled, two chains in
-# that table matter:
+# Only HomeProxy builds that run sing-box's TUN inbound with auto_redirect are
+# handled. sing-box then owns table inet sing-box, and its prerouting chain does
+# "tcp redirect to :<port>" in nat, before any route lookup, so UU's "from
+# <device> lookup <table>" rule never sees a boosted device's TCP. UDP already
+# reaches UU's tunnel: the policy rule wins over sing-box's marks. Official
+# HomeProxy's redirect and TPROXY modes hook fw4 instead; nothing here acts on
+# those.
 #
-#   prerouting_prematch  filter  priority dstnat - 1  queues TCP to NFQUEUE
-#   prerouting           nat     priority dstnat + 2  th dport 53 dnat to <tun>
-#                                                     tcp redirect to :<port>
+# As for OpenClash, the exemption is "boosted device AND a prefix UU routes",
+# returned from the top of both prerouting chains. DNS is exempted for the
+# boosted device whatever the destination: sing-box would answer it through the
+# proxy exit, with addresses UU does not route.
 #
-# and one more filter chain at dstnat + 3 that marks UDP/ICMP.
-#
-# WHY ONLY TCP BREAKS
-# -------------------
-# UU DNATs a boosted device's DNS to 8.8.8.8 from its own nat chain at priority
-# dstnat (-100), which runs before both of sing-box's. UU's policy routing is
-# "from <device> lookup 179" at pref 0, ahead of the marks sing-box sets. So a
-# game's UDP reaches UU's tunnel even while sing-box is running - that part
-# already works.
-#
-# TCP does not. sing-box's `tcp redirect` rewrites the destination in nat,
-# before any route lookup happens, so the connection lands on sing-box's own
-# listener and UU's ip rule never gets consulted. Measured on a live router:
-# every TCP connection from the boosted console came back from the proxy's
-# port, while its UDP was going into tun163 the whole time.
-#
-# So the exemption only has to cover the redirect, which is what the two chains
-# below are: the same "boosted device AND a destination UU routes" return as
-# the OpenClash integration, inserted at the top of both.
-#
-# WHY DNS IS EXEMPTED SEPARATELY
-# ------------------------------
-# This one cannot be destination-scoped. sing-box rewrites port 53 to its DNS
-# server on the TUN peer. Let it and the console resolves game names through
-# the proxy exit, which answers with addresses from the wrong CDN region -
-# addresses UU does not route - so the boost silently stops working even though
-# every rule looks right. That is precisely what UU's own DNS DNAT is for, so
-# port 53 returns unconditionally for a boosted device.
-#
-# WHY EVERY PASS REBUILDS
-# -----------------------
-# sing-box regenerates its whole table on each start and on subscription
-# updates (utpl ... | nft -f -), taking our sets and rules with it while our
-# signature file survives. Trusting the signature alone would leave the sets
-# empty and the exemption matching nothing, so the sets themselves are checked
-# on every pass and refilled when missing.
+# sing-box rebuilds its whole table on start and on subscription updates,
+# taking our sets and rules with it, so every pass checks for both.
 
 MODE="${1:-cooperative}"
 LOG_TAG="uu-homeproxy"
@@ -98,7 +69,7 @@ add_rules() {
 			ip saddr @$SET_SRC ip daddr @$SET_DST counter return \
 			comment "\"$TAG_DST\"" 2>/dev/null
 		has_tag "$c" "$TAG_DNS" || nft insert rule inet "$TABLE" "$c" \
-			ip saddr @$SET_SRC udp dport 53 counter return \
+			ip saddr @$SET_SRC th dport 53 counter return \
 			comment "\"$TAG_DNS\"" 2>/dev/null
 	done
 }
