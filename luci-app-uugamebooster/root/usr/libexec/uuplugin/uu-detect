@@ -81,6 +81,13 @@ done
 ua3f=""
 nft list table inet UA3F >/dev/null 2>&1 && ua3f="1"
 
+# Same reasoning as UA3F: HomeProxy's sing-box owns the inet sing-box table,
+# so the table existing is what means it is intercepting traffic. During a
+# restart the table briefly disappears, which the status page shows as
+# "installed, not running" - accurate enough for a one-second snapshot.
+homeproxy=""
+nft list table inet sing-box >/dev/null 2>&1 && homeproxy="1"
+
 # Devices UU is boosting right now.
 #
 # UU adds a policy routing rule per boosted device ("from <ip> lookup <table>")
@@ -193,6 +200,7 @@ echo "dnat=$dnat"
 echo "foreign=$foreign"
 echo "openclash=$openclash"
 echo "ua3f=$ua3f"
+echo "homeproxy=$homeproxy"
 echo "boosted=${boosted% }"
 echo "blocked=${blocked# }"
 

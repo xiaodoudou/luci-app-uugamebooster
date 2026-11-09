@@ -65,6 +65,10 @@ nft list chain inet sing-box prerouting | head -4
 
 The first line of the chain should be the `uu-hp-dns` return, then `uu-hp-dest`. If both are there and the game still fails to matchmake, the problem is past the netfilter layer - check `logread | grep uuplugin`.
 
+## Status page
+
+The status panel at the top of the plugin's page shows HomeProxy the same way it shows OpenClash and UA3F: whether it is installed, whether its table is up, and - while a device is boosted and the mode is cooperative - how many game destinations are currently exempted from it.
+
 ## Modes
 
 | Mode | What happens |
