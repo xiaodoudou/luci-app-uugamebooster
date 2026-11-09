@@ -297,3 +297,17 @@ msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用
 
 msgid ", to turn it back on."
 msgstr "，即可重新开启。"
+
+# HomeProxy coexistence (uu-homeproxy-sync)
+
+msgid "HomeProxy"
+msgstr "HomeProxy"
+
+msgid "Leave HomeProxy alone"
+msgstr "不改动 HomeProxy"
+
+msgid "Exempted from HomeProxy"
+msgstr "已排除 HomeProxy"
+
+msgid "HomeProxy runs sing-box, which intercepts LAN traffic from a table of its own. With a TUN inbound and auto-redirect, its <code>tcp redirect</code> rewrites a connection's destination before any routing decision is made, so a boosted device's game connections land on the proxy instead of UU's tunnel. Its UDP is unaffected - routing already prefers UU - which is why some games look fine while others will not connect at all.<br /><br /><strong>Split the traffic</strong> returns the destinations UU routes, plus DNS, from the top of HomeProxy's chains, for boosted devices only. Everything else from that device keeps going through the proxy, so the store, downloads and streaming still work.<br />DNS is exempted separately and without a destination, because HomeProxy would otherwise resolve game names through the proxy exit and hand UU addresses it does not route.<br /><br />Polling interval and the widest allowed route come from the OpenClash tab, which every coexistence daemon shares.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br />Nothing happens unless HomeProxy is installed."
+msgstr "HomeProxy 运行 sing-box，用自己的 nft 表透明接管局域网流量。在 TUN 入站 + auto-redirect 模式下，它的 <code>tcp redirect</code> 会在任何路由决策之前改写连接的目的地，导致被加速设备的游戏连接落进代理，而不是 UU 的隧道。UDP 不受影响 —— 路由层本来就优先 UU —— 所以有些游戏看起来正常，有些却完全连不上。<br /><br /><strong>分流</strong>把 UU 要路由的目标地址连同 DNS 一起，从 HomeProxy 两条链的顶端放行，且仅对被加速的设备生效。该设备的其余流量继续走代理，商店、下载和流媒体都不受影响。<br />DNS 单独豁免且不限定目的地，否则 HomeProxy 会经代理出口解析游戏域名，把 UU 无法路由的地址交给它。<br /><br />轮询间隔与最大允许的路由前缀沿用 OpenClash 标签页的设置，所有共存守护共享这一组参数。<br /><strong>不改动 HomeProxy</strong> 则什么都不做。<br />未安装 HomeProxy 时不会做任何事。"
