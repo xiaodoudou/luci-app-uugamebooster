@@ -1,0 +1,74 @@
+# Build a stand-alone .apk of luci-app-uugamebooster, no firmware required.
+#
+# The package is LUCI_PKGARCH:=all - scripts, Lua and the prebuilt view
+# filters - so a generic SDK build is enough and nothing has to match the
+# running kernel. The view filters are compiled here with zig, exactly as
+# tools/build-preload.sh intends, because the repository ships none.
+#
+# Run it from the Actions tab (workflow_dispatch), then install:
+#
+#   apk add --allow-untrusted ./luci-app-uugamebooster-*.apk
+
+name: Build APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install zig
+        run: |
+          curl -sSLo /tmp/zig.tar.xz \
+            https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+          mkdir -p "$HOME/zig"
+          tar xf /tmp/zig.tar.xz -C "$HOME/zig" --strip-components=1
+          echo "$HOME/zig" >> "$GITHUB_PATH"
+
+      - name: Build the view-filter shims
+        run: |
+          tools/build-preload.sh payload/preload
+          mkdir -p luci-app-uugamebooster/root/usr/lib/uuplugin
+          cp payload/preload/*.so luci-app-uugamebooster/root/usr/lib/uuplugin/
+          ls -la luci-app-uugamebooster/root/usr/lib/uuplugin/
+
+      - name: Download the ImmortalWrt SDK (qualcommax/ipq60xx)
+        run: |
+          BASE="https://downloads.immortalwrt.org/snapshots/targets/qualcommax/ipq60xx"
+          curl -sSfL "$BASE/immortalwrt-sdk-qualcommax-ipq60xx_gcc-14.4.0_musl.Linux-x86_64.tar.zst" \
+            -o sdk.tar.zst
+          tar --zstd -xf sdk.tar.zst
+          mv immortalwrt-sdk-* sdk
+
+      - name: Install feeds
+        working-directory: sdk
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Copy the package into the tree
+        run: rm -rf sdk/package/luci-app-uugamebooster && cp -r luci-app-uugamebooster sdk/package/
+
+      - name: Build
+        working-directory: sdk
+        run: |
+          echo "CONFIG_PACKAGE_luci-app-uugamebooster=y" >> .config
+          make defconfig
+          make package/luci-app-uugamebooster/compile -j"$(nproc)" V=s
+
+      - name: Collect the apk
+        run: |
+          mkdir -p out
+          find sdk/bin -type f -name 'luci-app-uugamebooster*.apk*' -exec cp {} out/ \;
+          ls -la out/
+          test -n "$(find out -name '*.apk')"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: luci-app-uugamebooster-apk
+          path: out/
