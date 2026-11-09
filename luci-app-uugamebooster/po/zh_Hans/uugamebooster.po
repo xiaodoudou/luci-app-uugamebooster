@@ -16,8 +16,8 @@ msgstr "基本设置"
 msgid "What to boost"
 msgstr "加速对象"
 
-msgid "OpenClash"
-msgstr "OpenClash"
+msgid "Coexistence"
+msgstr "共存方式"
 
 msgid "Device visibility"
 msgstr "设备可见性"
@@ -73,50 +73,56 @@ msgstr "mipsel（小端）"
 msgid "mipseb (big endian)"
 msgstr "mipseb（大端）"
 
-msgid "Coexistence"
-msgstr "共存方式"
+msgid "How coexistence works"
+msgstr "共存机制"
+
+msgid "Left alone, whichever of the two hooks netfilter first wins and the other does nothing. Coexistence moves the dividing line onto UU's side: only what UU actually accelerates leaves the proxy, and only for devices it is boosting. Everything else from that same device keeps going through the proxy - so most of a boosted PC's traffic still showing up there is the intended result, not a fault.<br /><br /><strong>Split the traffic</strong> - the split described above. The recommended one.<br /><strong>Take whole devices off the proxy</strong> - the blunt fallback: a boosted device skips the proxy entirely, whatever it is talking to. For the device that will not split cleanly.<br /><strong>Leave it alone</strong> - the two are left to fight over the packets."
+msgstr "放任不管时，两个钩子里先挂上的那个会悄悄赢，另一个等于没装。共存的做法是把分界线放在 UU 这一侧：只有 UU 真正加速的目标才脱离代理，且只对已加速的设备生效；同一设备的其余流量照常走代理——所以已加速电脑的大部分流量仍出现在代理里，是预期结果，不是故障。<br /><br /><strong>分流</strong>——按上面的规则拆分，推荐。<br><strong>整机排除出代理</strong>——兜底方案：已加速的设备整体不走代理，不管它连的是什么。适用于拆不干净的设备。<br><strong>不做处理</strong>——两边各抢各的。"
+
+msgid "Redirects LAN traffic from chains inside fw4. The exemption is UU's own destination routes, plus the UDP ports and fwmark UU sets - all read back from its live rules, because they differ between builds."
+msgstr "在 fw4 的链里重定向局域网流量。例外项是 UU 自己的目标路由，加上 UU 设置的 UDP 端口和 fwmark——全部从它实际生效的规则里读回来，因为各版本并不一致。"
+
+msgid "Drives mihomo behind an nftables table of its own. DNS is exempted too, because UU sends a boosted device's lookups through its tunnel. Give it a <code>redir-host</code> DNS profile: fake-ip breaks the boost."
+msgstr "驱动 mihomo，用它自己的 nftables 表。DNS 也一并豁免，因为 UU 会把已加速设备的解析请求送进自己的隧道。请给它配 <code>redir-host</code> 的 DNS 配置：fake-ip 会让加速失效。"
+
+msgid "Only its TUN mode with auto-redirect is handled. In its other modes the traffic is hooked inside fw4, out of reach - add the device under HomeProxy's own Access Control instead."
+msgstr "只处理它的 TUN 模式加自动重定向。其他模式下流量是在 fw4 内部挂钩的，够不着——请改为在 HomeProxy 自己的访问控制里添加该设备。"
+
+msgid "Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only TCP is exempted, because that is all UA3F touches."
+msgstr "把局域网 TCP 引流到自己身上来改写 User-Agent。只豁免 TCP，因为 UA3F 也只碰 TCP。"
 
 msgid "Split the traffic (recommended)"
 msgstr "分流（推荐）"
 
-msgid "Take whole devices off OpenClash"
-msgstr "让整台设备绕过 OpenClash"
+msgid "Take whole devices off the proxy"
+msgstr "整机排除出代理"
 
-msgid "Leave OpenClash alone"
-msgstr "不改动 OpenClash"
+msgid "Leave it alone"
+msgstr "不做处理"
 
-msgid "UU and OpenClash both intercept LAN traffic, so left alone one of them silently wins.<br /><br /><strong>Split the traffic</strong> lets each handle what it is for. Only what UU actually accelerates leaves OpenClash: the game servers UU routes into its tunnel, plus the UDP ports it marks - both read back from UU's own live rules, for boosted devices only. Everything else from that same device keeps going through OpenClash.<br /><em>So most of a boosted PC's traffic still going through OpenClash is the intended result, not a fault.</em><br /><br /><strong>Take whole devices off OpenClash</strong> is the blunt fallback: the devices you list stop using the proxy entirely while UU runs.<br /><strong>Leave OpenClash alone</strong> changes nothing - useful if you would rather tune OpenClash by hand."
-msgstr "UU 和 OpenClash 都会透明接管局域网流量，若不处理，只会有一方生效。<br /><br /><strong>分流</strong>让两者各司其职。只有 UU 真正加速的流量才会离开 OpenClash：UU 导入隧道的游戏服务器地址，以及它标记的 UDP 端口 —— 这两项都从 UU 的实时规则中读取，且仅对被加速的设备生效。同一台设备的其他流量仍然走 OpenClash。<br /><em>因此，被加速的电脑大部分流量依然经过 OpenClash，这是预期结果，并非故障。</em><br /><br /><strong>让整台设备绕过 OpenClash</strong> 是简单的备选方案：UU 运行期间，列出的设备完全不使用代理。<br /><strong>不改动 OpenClash</strong> 则什么都不做，适合你想手动调整 OpenClash 的情况。"
+msgid "No proxy installed"
+msgstr "未安装代理"
 
-msgid "Move devices off OpenClash's own bypass list"
-msgstr "将设备移出 OpenClash 自身的绕行列表"
+msgid "There is nothing to coexist with: no OpenClash, Nikki, HomeProxy or UA3F was found on this router. Install one and its setting appears here."
+msgstr "没有可共存的对象：这台路由器上没有找到 OpenClash、Nikki、HomeProxy 或 UA3F。安装其中一个后，对应设置就会出现在这里。"
 
-msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips). A boosted device on that list skips OpenClash for everything, so the split above can do nothing for it. Turn this on to let the plugin take such a device off OpenClash's list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's configuration."
-msgstr "OpenClash 维护着一份完全跳过代理的设备列表（lan_ac_black_ips）。被加速的设备若在该列表中，所有流量都会跳过 OpenClash，上面的分流便无法生效。开启后，插件会在设备被加速期间将其暂时移出该列表，之后再放回。默认关闭，因为这会修改并保存 OpenClash 的配置。"
+msgid "OpenClash: move boosted devices off its bypass list"
+msgstr "OpenClash：把已加速设备移出它的绕过列表"
 
-msgid "Devices to bypass - by MAC"
-msgstr "绕行设备 —— 按 MAC"
+msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips), and a device on it returns before any finer exemption can apply. Turn this on to take such a device off that list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's config."
+msgstr "OpenClash 维护一份完全跳过代理的设备列表（lan_ac_black_ips），列表里的设备会在更细的例外生效前就直接返回。开启后，设备被加速期间会从该列表移出，结束后放回。默认关闭，因为这会修改并保存 OpenClash 的配置。"
 
-msgid "These stop using OpenClash while UU is running."
-msgstr "UU 运行期间，这些设备不再使用 OpenClash。"
+msgid "Re-check interval"
+msgstr "重新检查间隔"
 
-msgid "Devices to bypass - by IP"
-msgstr "绕行设备 —— 按 IP"
-
-msgid "Addresses or CIDR ranges that stop using OpenClash while UU runs."
-msgstr "UU 运行期间不再使用 OpenClash 的地址或 CIDR 网段。"
-
-msgid "How often to re-check UU's routes"
-msgstr "重新检查 UU 路由的间隔"
-
-msgid "In seconds. UU adds and removes game routes as it goes."
-msgstr "单位为秒。UU 会在运行过程中不断增删游戏路由。"
+msgid "Seconds between re-reads of UU's route list. UU adds and removes game routes while it runs, and every proxy above follows this interval."
+msgstr "单位为秒，两次读取 UU 路由表的间隔。UU 运行时会不断增删游戏路由，上面每个代理都按这个间隔跟随。"
 
 msgid "Widest route to divert"
 msgstr "允许分流的最大网段"
 
-msgid "A safety limit, as a prefix length: never send a route broader than this around OpenClash. Stops one stray default route from pulling the whole internet out of the proxy."
-msgstr "以前缀长度表示的安全上限：比该值更宽的路由绝不绕过 OpenClash。可避免一条异常的默认路由把整个互联网都带离代理。"
+msgid "A safety limit, as a prefix length: a route broader than this is never sent around the proxy. Stops one stray default route from pulling the whole internet out of it."
+msgstr "安全阈值，用前缀长度表示：比它更宽的路由永远不会被绕开代理。避免一条误加的默认路由把整个互联网都从代理里拉出去。"
 
 msgid "Devices UU is allowed to see"
 msgstr "允许 UU 看到的设备"
@@ -214,6 +220,15 @@ msgstr "网易连接"
 msgid "connecting"
 msgstr "正在连接"
 
+msgid "Will not start after a reboot"
+msgstr "重启后不会自动启动"
+
+msgid "Boot start is off although the service is enabled. Save & Apply, or run"
+msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用，或执行"
+
+msgid ", to turn it back on."
+msgstr "，即可重新开启。"
+
 msgid "Conflicting UU installation"
 msgstr "检测到冲突的 UU 安装"
 
@@ -235,6 +250,9 @@ msgstr "通用版本 —— 仅支持游戏主机"
 msgid "Running"
 msgstr "运行中"
 
+msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
+msgstr "此固件的 iptables 没有 DNAT 目标，UU 的 DNS 重定向改由 nftables 处理。"
+
 msgid "Tunnel"
 msgstr "隧道"
 
@@ -247,73 +265,26 @@ msgstr "已加速设备"
 msgid "none - boost a device in the UU app"
 msgstr "暂无 —— 请在 UU App 中选择要加速的设备"
 
-msgid "not installed"
-msgstr "未安装"
+msgid "left alone"
+msgstr "未改动"
 
-msgid "installed, not running"
-msgstr "已安装，未运行"
+msgid "not running"
+msgstr "未运行"
 
-msgid "Exempted from proxy"
-msgstr "已排除代理"
+msgid "devices excluded"
+msgstr "台设备已排除"
 
-msgid "game destinations, for boosted devices only"
-msgstr "个游戏目标地址，仅对已加速设备生效"
+msgid "exempted"
+msgstr "项例外"
 
-msgid "nothing - no device is being boosted"
-msgstr "无 —— 当前没有设备在加速"
+msgid "nothing to exempt"
+msgstr "无例外"
+
+msgid "Only its TUN mode with auto-redirect is handled."
+msgstr "只处理 TUN 模式加自动重定向的情况。"
 
 msgid "Status"
 msgstr "状态"
 
 msgid "Collecting data..."
 msgstr "正在获取数据…"
-
-msgid "UA3F"
-msgstr "UA3F"
-
-msgid "Keep game traffic out of UA3F (recommended)"
-msgstr "游戏流量不经过 UA3F（推荐）"
-
-msgid "Leave UA3F alone"
-msgstr "不改动 UA3F"
-
-msgid "UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, which also takes a boosted device's game connections away from UU.<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the game servers UU routes into its tunnel, and only for boosted devices. Everything else from that device, its web browsing included, still goes through UA3F.<br /><strong>Leave UA3F alone</strong> changes nothing.<br />Nothing happens unless UA3F is installed and running."
-msgstr "UA3F 通过把局域网的 TCP 流量转给自己来改写 User-Agent，这也会把被加速设备的游戏连接从 UU 手里抢走。<br /><br /><strong>游戏流量不经过 UA3F</strong> 只放行 UU 导入隧道的游戏服务器地址，且仅对被加速的设备生效。该设备的其他流量，包括网页浏览，仍然经过 UA3F。<br /><strong>不改动 UA3F</strong> 则什么都不做。<br />只有在 UA3F 已安装并运行时才会生效。"
-
-msgid "left alone"
-msgstr "未改动"
-
-msgid "Exempted from UA3F"
-msgstr "已排除 UA3F"
-
-msgid "Will not start after a reboot"
-msgstr "重启后不会自动启动"
-
-msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
-msgstr "此固件的 iptables 没有 DNAT 目标，UU 的 DNS 重定向改由 nftables 处理。"
-
-msgid "Boot start is off although the service is enabled. Save & Apply, or run"
-msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用，或执行"
-
-msgid ", to turn it back on."
-msgstr "，即可重新开启。"
-
-# HomeProxy coexistence (uu-homeproxy-sync)
-
-msgid "HomeProxy"
-msgstr "HomeProxy"
-
-msgid "Keep game traffic out of HomeProxy (recommended)"
-msgstr "游戏流量不经过 HomeProxy（推荐）"
-
-msgid "Leave HomeProxy alone"
-msgstr "不改动 HomeProxy"
-
-msgid "Exempted from HomeProxy"
-msgstr "已排除 HomeProxy"
-
-msgid "Only its TUN mode with auto-redirect is handled. See the HomeProxy tab."
-msgstr "只处理它的 TUN + auto-redirect 模式，详见 HomeProxy 标签页。"
-
-msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely.<br />The polling interval and widest route come from the OpenClash tab."
-msgstr "HomeProxy 使用 TUN 入站并开启 auto-redirect 时，会在 UU 路由之前把局域网的 TCP 转给 sing-box，所以被加速设备的游戏连接会失败，而 UDP 仍然正常。<br /><br /><strong>游戏流量不经过 HomeProxy</strong> 放行 UU 导入隧道的游戏服务器地址以及该设备的 DNS，且仅对被加速的设备生效。该设备的其他流量仍然经过 HomeProxy。<br /><strong>不改动 HomeProxy</strong> 则什么都不做。<br /><br />HomeProxy 的其他模式不在处理范围内。这种情况下，请在 HomeProxy 的访问控制里把代理过滤模式设为<em>仅允许列表外</em>，并添加该设备；它会完全不经过 HomeProxy。<br />轮询间隔和最宽路由沿用 OpenClash 标签页的设置。"
