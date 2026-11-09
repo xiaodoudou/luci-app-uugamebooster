@@ -60,6 +60,7 @@ TAG_DNS="uu-hp-dns"
 STATE="/var/run/uu-homeproxy.state"
 SIG="/var/run/uu-homeproxy.sig"
 NFT_TMP="/tmp/.uu-homeproxy.nft"
+LOCK_DIR="/var/run/uu-homeproxy.lock"
 
 # Both chains are needed - the filter one decides what gets queued, the nat one
 # is where the redirect sits - but act on whichever this version has, so a
@@ -142,6 +143,26 @@ cleanup() {
 	log "HomeProxy exemptions removed."
 }
 
+# One writer at a time. procd starts this on service start; a leftover manual
+# run would race it - two pollers insert the same rules twice or fight over
+# cleanup. mkdir is the atomic test-and-set busybox always has; a lock left
+# behind by a killed instance is detected via the recorded pid and cleared.
+single_instance() {
+	local pid
+	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+		pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+		if [ -n "$pid" ] && [ -d "/proc/$pid" ] &&
+		   grep -q uu-homeproxy "/proc/$pid/cmdline" 2>/dev/null; then
+			log "Another instance is running (pid $pid); exiting."
+			exit 0
+		fi
+		log "Removing a stale lock."
+		rm -rf "$LOCK_DIR"
+		mkdir "$LOCK_DIR" 2>/dev/null || exit 1
+	fi
+	echo "$$" > "$LOCK_DIR/pid"
+}
+
 run_cooperative() {
 	local ips prefixes sig prev up=""
 
@@ -204,7 +225,7 @@ run_cooperative() {
 }
 
 case "$MODE" in
-	cleanup)     cleanup ;;
-	cooperative) trap 'cleanup; exit 0' INT TERM; run_cooperative ;;
+	cleanup)     cleanup; rm -rf "$LOCK_DIR" ;;
+	cooperative) single_instance; trap 'cleanup; rm -rf "$LOCK_DIR"; exit 0' INT TERM; run_cooperative ;;
 	*)           err "Unknown mode '$MODE'"; exit 1 ;;
 esac
