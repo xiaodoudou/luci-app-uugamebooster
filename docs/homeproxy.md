@@ -63,6 +63,15 @@ nft list chain inet sing-box prerouting | head -4
 
 The first line of the chain should be the `uu-hp-dns` return, then `uu-hp-dest`. If both are there and the game still fails to matchmake, the problem is past the netfilter layer - check `logread | grep uuplugin`.
 
+## Public CDN ranges in UU's tables
+
+UU's route tables include a few ranges that are not game traffic at all: Fastly's `151.101.0.0/16` and `199.232.0.0/16`, and Cloudflare's `162.159.128.0/17`. Twitch and Discord live there. Left alone they cause two different failures, measured on a live router:
+
+- **Twitch and Discord break for boosted PCs.** The exemption set is merged across boosted devices, so a PC's TCP to `151.101.x` is returned past the proxy - and Fastly is unreachable directly from CN. Discord comes back as `ERR_CONNECTION_RESET` for the same reason.
+- **The QUIC half dies too.** sing-box only redirects TCP; UDP to those ranges still follows UU's policy routing into a tunnel built for game traffic.
+
+The daemon trims them on every poll, both out of the exemption set (`collect_prefixes` never yields them) and out of UU's own tables (`trim_uu_routes`; UU re-adds them on refresh). With the trim in place: Twitch serves `200`/`301` through the proxy, Discord serves `200`, and the same site's game-adjacent UDP stops riding the tunnel. The same trim runs in the OpenClash and UA3F daemons, which build their exemption sets the same way.
+
 ## Status page
 
 When HomeProxy is installed, the status panel shows whether it is running and, in TUN mode, how many game destinations are currently exempted from it. In any other mode it says that mode isn't handled.

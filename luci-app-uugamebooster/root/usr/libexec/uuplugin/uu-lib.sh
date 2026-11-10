@@ -67,12 +67,27 @@ find_tuns() {
 	echo ""
 }
 
+# UU ships a few public CDN ranges inside its game route tables: Fastly's
+# 151.101.0.0/16 and 199.232.0.0/16, and Cloudflare's 162.159.128.0/17 -
+# Twitch and Discord both live there. They get into the merged exemption set
+# because one boosted device's table listed them, and then every other
+# boosted device's TCP to those ranges is returned past the proxy and dies
+# on the GFW, while its UDP leaves through UU's tunnel - a different exit
+# than the proxy's. None of that is game traffic, so two rules:
+#
+#   - collect_prefixes never exempts them;
+#   - trim_uu_routes deletes them from UU's own tables, because a route left
+#     behind sends the QUIC half of the same site into a tunnel that only
+#     carries game traffic. UU re-adds them on refresh, hence a per-pass trim.
+TRIM_PFX='151\.101\.|199\.232\.|162\.159\.'
+
 # Destination prefixes UU routes into its tunnel, across every one of its TUNs.
 collect_prefixes() {
 	local dev p mask
 	for dev in "$@"; do
 		ip route show table all dev "$dev" 2>/dev/null | awk '{print $1}'
 	done | \
+	grep -vE "^($TRIM_PFX)" | \
 	while read -r p; do
 		case "$p" in
 			default|0.0.0.0/0|"") continue ;;
@@ -88,4 +103,23 @@ collect_prefixes() {
 		[ "$mask" -lt "$MINPFX" ] && continue
 		echo "$p"
 	done | sort -u
+}
+
+# Delete the CDN ranges above from UU's per-device route tables. Called once
+# per poll by every coexistence daemon, since UU refreshes its tables.
+trim_uu_routes() {
+	local dev p tbl lines n=0
+	for dev in $(find_tuns); do
+		lines=$(ip route show table all dev "$dev" 2>/dev/null |
+			awk -v P="^($TRIM_PFX)" \
+			    '$1 ~ P {t="main"; for (i = 1; i <= NF; i++) if ($i == "table") t = $(i + 1); print $1, t}')
+		[ -n "$lines" ] || continue
+		printf '%s\n' "$lines" | while read -r p tbl; do
+			case "$p" in */*) ;; *) p="$p/32" ;; esac
+			ip route del "$p" table "$tbl" 2>/dev/null
+		done
+		n=$((n + $(printf '%s\n' "$lines" | grep -c .)))
+	done
+	[ "$n" -gt 0 ] && log "Trimmed $n CDN route(s) out of UU's tables."
+	return 0
 }

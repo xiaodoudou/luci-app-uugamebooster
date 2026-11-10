@@ -191,6 +191,7 @@ run_cooperative() {
 			fi
 		fi
 
+		trim_uu_routes
 		nap "$INTERVAL"
 	done
 }
