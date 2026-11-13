@@ -19,7 +19,7 @@ UA3F has its own skip list, `UA3F_SKIP_IPSET`, but it's destination-only and glo
 
 So `uu-ua3f-sync` does what the [OpenClash split](openclash.md) does. It puts one `return` rule at the top of UA3F's `PREROUTING` chain, matching **boosted device AND a destination UU routes into its tunnel**, both read from UU's live state. Everything else from that device, its web browsing included, still gets UA3F's rewrite. That matters here more than with OpenClash: the point of UA3F is that the campus network never sees an unrewritten User-Agent, and exempting whole devices would undo that for as long as they're boosted.
 
-The two sets the rule uses (`uu_boosted`, `uu_dests`) have to live inside `inet UA3F`, because a rule can't reference another table's sets.
+The rule matches against `uu_dev_dests`, a set of device and destination pairs, so each boosted device is only exempted for what UU routes for that device. It and `uu_boosted` have to live inside `inet UA3F`, because a rule can't reference another table's sets.
 
 ## Surviving UA3F restarts
 

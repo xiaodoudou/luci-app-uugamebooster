@@ -56,7 +56,8 @@ SPECSTATE="/var/run/uu-openclash.spec"
 NFT_TMP="/tmp/.uu-coop.nft"
 
 SET_SRC="uu_boosted"
-SET_DST="uu_dests"
+SET_DST="uu_dev_dests"
+SET_OLD="uu_dests"
 TAG_DST="uu-coop-dest"
 TAG_UDP="uu-coop-udp"
 TAG_MARK="uu-coop-mark"
@@ -142,9 +143,20 @@ oc_chains() {
 	done
 }
 
+have_sets() { nft list set inet fw4 "$SET_DST" >/dev/null 2>&1; }
+
+# The destination set is keyed on device and prefix together, so each device is
+# exempted only for what UU routes for it.
 ensure_sets() {
 	nft add set inet fw4 "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
-	nft add set inet fw4 "$SET_DST" '{ type ipv4_addr; flags interval; auto-merge; }' 2>/dev/null
+	nft add set inet fw4 "$SET_DST" '{ type ipv4_addr . ipv4_addr; flags interval; }' 2>/dev/null
+}
+
+del_sets() {
+	local s
+	for s in "$SET_SRC" "$SET_DST" "$SET_OLD"; do
+		nft delete set inet fw4 "$s" 2>/dev/null
+	done
 }
 
 # Insert the exemptions at the top of each OpenClash chain. Idempotent: the
@@ -166,7 +178,7 @@ ensure_rules() {
 
 	for c in $(oc_chains); do
 		if ! nft list chain inet fw4 "$c" 2>/dev/null | grep -q "$TAG_DST"; then
-			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC ip daddr @$SET_DST \
+			nft insert rule inet fw4 "$c" ip saddr . ip daddr @$SET_DST \
 				counter return comment "\"$TAG_DST\"" 2>/dev/null && added=1
 		fi
 		# Exempt exactly the UDP slice UU marks, and nothing when it marks none.
@@ -184,7 +196,7 @@ ensure_rules() {
 		# whatever the ports.
 		if [ -n "$mark" ] &&
 		   ! nft list chain inet fw4 "$c" 2>/dev/null | grep -q "$TAG_MARK"; then
-			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC meta mark "$mark" \
+			nft insert rule inet fw4 "$c" ip saddr @$SET_SRC meta mark "{ $mark }" \
 				counter return comment "\"$TAG_MARK\"" 2>/dev/null && added=1
 		fi
 	done
@@ -212,7 +224,7 @@ del_rules() { del_tagged "$TAG_DST" "$TAG_UDP" "$TAG_MARK"; }
 # Replace both sets in a single atomic nft run. Adding ~12k elements one
 # "nft add element" at a time would fork 12k times per poll and never finish.
 apply_sets() {
-	local ips="$1" prefixes="$2" n=0 line=""
+	local ips="$1" pairs="$2"
 
 	{
 		echo "flush set inet fw4 $SET_SRC"
@@ -220,20 +232,7 @@ apply_sets() {
 			echo "add element inet fw4 $SET_SRC { $(echo $ips | tr ' ' ',') }"
 		fi
 		echo "flush set inet fw4 $SET_DST"
-		# Chunked so no single statement grows unreasonably long.
-		for p in $prefixes; do
-			if [ -z "$line" ]; then
-				line="$p"
-			else
-				line="$line,$p"
-			fi
-			n=$((n + 1))
-			if [ "$n" -ge 2000 ]; then
-				echo "add element inet fw4 $SET_DST { $line }"
-				line=""; n=0
-			fi
-		done
-		[ -n "$line" ] && echo "add element inet fw4 $SET_DST { $line }"
+		pair_batches "inet fw4 $SET_DST" "$pairs"
 	} > "$NFT_TMP"
 
 	nft -f "$NFT_TMP" 2>/dev/null
@@ -299,10 +298,7 @@ restore_lan_ac() {
 
 cleanup() {
 	del_rules
-	nft flush set inet fw4 "$SET_SRC" 2>/dev/null
-	nft flush set inet fw4 "$SET_DST" 2>/dev/null
-	nft delete set inet fw4 "$SET_SRC" 2>/dev/null
-	nft delete set inet fw4 "$SET_DST" 2>/dev/null
+	del_sets
 	restore_lan_ac
 	rm -f "$STATE" "$SIG" "$SPECSTATE" "$NFT_TMP"
 
@@ -357,7 +353,7 @@ run_bypass() {
 # The UDP ports and fwmark to exempt for the devices currently boosted, merged
 # across them. A configured value wins; otherwise it is read from UU's own rules.
 claimed_spec() {
-	local ips="$1" d p udp="$UU_UDP_PORTS" mark="$UU_MARK_CFG"
+	local ips="$1" d p m udp="$UU_UDP_PORTS" mark="$UU_MARK_CFG"
 
 	for d in $ips; do
 		if [ -z "$UU_UDP_PORTS" ]; then
@@ -368,13 +364,20 @@ claimed_spec() {
 				esac
 			done
 		fi
-		[ -n "$mark" ] || mark="$(uu_marked_fwmark "$d")"
+		# Each boosted device gets its own mark (0x163, 0x164, ...).
+		if [ -z "$UU_MARK_CFG" ]; then
+			m="$(uu_marked_fwmark "$d")"
+			case ",$mark," in
+				*",$m,"*) ;;
+				*) [ -n "$m" ] && mark="${mark:+$mark,}$m" ;;
+			esac
+		fi
 	done
 	printf '%s|%s\n' "$udp" "$mark"
 }
 
 run_cooperative() {
-	local ips prefixes sig prev devs chains spec udp mark
+	local ips pairs prefixes sig prev devs chains spec udp mark
 
 	# Wait in-loop rather than exiting. Exiting hands control to procd's
 	# respawn, and since OpenClash's chains legitimately disappear for a moment
@@ -386,6 +389,10 @@ run_cooperative() {
 	done
 	log "Cooperative mode active (poll: ${INTERVAL}s, min prefix: /$MINPFX)."
 
+	# A previous instance's rules may point at sets of another shape.
+	del_rules
+	del_sets
+	rm -f "$SIG" "$SPECSTATE"
 	: > "$STATE"
 	while :; do
 		ips="$(boosted_ips)"
@@ -410,25 +417,31 @@ run_cooperative() {
 		fi
 
 		devs="$(find_tuns)"
-		prefixes="$(collect_prefixes $devs)"
+		pairs="$(device_pairs "$ips" $devs)"
+		prefixes="$(pair_prefixes "$pairs")"
 
 		# Re-applying 12k elements every 5s would be pointless churn, so only
 		# rebuild when the inputs actually change.
-		sig="$(printf '%s|%s' "$ips" "$prefixes" | md5sum | awk '{print $1}')"
+		sig="$(printf '%s|%s' "$ips" "$pairs" | md5sum | awk '{print $1}')"
 		prev="$(cat "$SIG" 2>/dev/null)"
 
 		spec="$(claimed_spec "$ips")"
 		udp="${spec%%|*}"
 		mark="${spec#*|}"
 
-		ensure_sets
+		# A fw4 reload drops the sets but leaves the signature behind, so
+		# recreated sets have to be refilled whatever it says.
+		if ! have_sets; then
+			ensure_sets
+			prev=""
+		fi
 		# Always re-check the rules: an OpenClash reload wipes them even when
 		# nothing else has changed.
 		ensure_rules "$udp" "$mark"
 
 		if [ "$sig" != "$prev" ]; then
 			release_lan_ac "$ips"
-			if apply_sets "$ips" "$prefixes"; then
+			if apply_sets "$ips" "$pairs"; then
 				echo "$sig" > "$SIG"
 				# "echo $empty > file" still writes a newline, which the status
 				# page would count as one prefix.

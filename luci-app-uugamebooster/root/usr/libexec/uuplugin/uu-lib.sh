@@ -69,10 +69,70 @@ find_tuns() {
 
 # Destination prefixes UU routes into its tunnel, across every one of its TUNs.
 collect_prefixes() {
-	local dev p mask
+	local dev
 	for dev in "$@"; do
 		ip route show table all dev "$dev" 2>/dev/null | awk '{print $1}'
-	done | \
+	done | filter_prefixes
+}
+
+# Routing tables a device's own "from <ip> lookup <table>" rules point at.
+device_tables() {
+	ip rule show 2>/dev/null | awk -v ip="$1" '
+		{ hit = 0
+		  for (i = 1; i < NF; i++)
+			if ($i == "from" && ($(i + 1) == ip || $(i + 1) == ip "/32")) hit = 1 }
+		hit { for (i = 1; i < NF; i++) if ($i == "lookup") print $(i + 1) }' | sort -u
+}
+
+# What UU routes into its TUNs for this one device: only the tables its own
+# rules use, so one device is never exempted for another's game prefixes.
+# Falls back to every TUN's routes when the device's rules lead nowhere, so an
+# unexpected UU layout costs precision rather than the whole exemption.
+device_prefixes() {
+	local ip="$1" t dev out
+	shift
+	out="$(for t in $(device_tables "$ip"); do
+		for dev in "$@"; do
+			ip route show table "$t" dev "$dev" 2>/dev/null | awk '{print $1}'
+		done
+	done | filter_prefixes)"
+	if [ -n "$out" ]; then echo "$out"; else collect_prefixes "$@"; fi
+}
+
+# "<device> . <prefix>" for every boosted device, the element format of a
+# concatenated interval set. Such a set has no auto-merge and rejects a prefix
+# nested inside another, so nested ones are dropped first: CIDR blocks either
+# nest or are disjoint, never partly overlap.
+device_pairs() {
+	local ips="$1" ip
+	shift
+	for ip in $ips; do
+		# Zero-padded and sorted as text: busybox sort ignores per-key "n".
+		device_prefixes "$ip" "$@" | awk -F'[./]' '
+			{ printf "%010.0f %02d %s\n", (($1 * 256 + $2) * 256 + $3) * 256 + $4, $5, $0 }' |
+		sort | awk -v ip="$ip" '
+			{ start = $1; size = 1
+			  for (k = $2; k < 32; k++) size *= 2   # no "^": awk may lack libm
+			  end = start + size - 1
+			  if (n++ && start <= last) next
+			  last = end; print ip " . " $3 }'
+	done
+}
+
+# nft "add element" lines for <family table set> from device_pairs output,
+# chunked: UU can route thousands of prefixes per device.
+pair_batches() {
+	printf '%s\n' "$2" | awk -v t="$1" '
+		NF { l = l (n ? "," : "") $0
+		     if (++n >= 2000) { print "add element " t " { " l " }"; l = ""; n = 0 } }
+		END { if (n) print "add element " t " { " l " }" }'
+}
+
+# The distinct prefixes in device_pairs output, for the status page's count.
+pair_prefixes() { printf '%s\n' "$1" | sed -n 's/.* \. //p' | sort -u; }
+
+filter_prefixes() {
+	local p mask
 	while read -r p; do
 		case "$p" in
 			default|0.0.0.0/0|"") continue ;;

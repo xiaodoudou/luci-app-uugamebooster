@@ -60,30 +60,19 @@ function uuRender(d) {
 		var h = '';
 
 		// "Running" alone is misleading: after every start the plugin has to
-		// register with NetEase before the phone app can find the router.
+		// reach NetEase before the phone app can find the router.
 		var svc;
 		if (d.phase == 'ready')
 			svc = '<span class="uu-dot ok"></span><span class="t-ok"><%:Ready%></span>';
 		else if (d.phase == 'starting')
 			svc = '<span class="uu-dot warn"></span><span class="t-warn"><%:Starting%>&hellip;</span>' +
 			      ' <span class="uu-muted">&ndash; <%:no connection to NetEase yet%></span>';
-		else if (d.phase == 'registering')
-			svc = '<span class="uu-dot warn"></span><span class="t-warn"><%:Registering%>&hellip;</span>' +
-			      ' <span class="uu-muted">&ndash; <%:the app cannot find the router yet%></span>';
 		else
 			svc = '<span class="uu-dot bad"></span><span class="t-bad"><%:Not running%></span>';
 		h += uuRow('<%:Service%>', svc);
 
-		// Registration only matters while coming up - once Ready it restates
-		// what the service line already said. The control server address is
-		// worth keeping either way: it is the one piece of live information
-		// here that says which NetEase endpoint the tunnel is actually talking
-		// to, and it changes between sessions.
-		if (d.running && d.phase != 'ready') {
-			h += uuRow('<%:Registration%>', d.activated
-				? '<code>' + d.activated + '</code>'
-				: '<span class="uu-muted"><%:not registered yet%></span>');
-		}
+		// The control server address says which NetEase endpoint the tunnel is
+		// talking to, and it changes between sessions.
 		if (d.running) {
 			h += uuRow('<%:NetEase link%>', d.cloud
 				? '<span class="uu-dot ok"></span><code>' + d.cloud + '</code>'

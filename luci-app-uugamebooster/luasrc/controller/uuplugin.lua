@@ -42,25 +42,17 @@ function act_status()
 	e.boosted = det:match("boosted=([^\r\n]*)")
 	if e.boosted == "" then e.boosted = nil end
 
-	-- Registered with NetEase, and talking to their control servers. Until both
-	-- are true the phone app cannot find the router, even though the process is
-	-- up - so the UI distinguishes "running" from "ready".
+	-- Until the control connection is up the phone app cannot find the router,
+	-- even though the process is running. Binding itself lives in NetEase's
+	-- cloud and nothing on the router records it, so the app is the place to
+	-- check that.
 	e.cloud = det:match("cloud=([^\r\n]*)")
 	if e.cloud == "" then e.cloud = nil end
-	e.activated = det:match("activated=([^\r\n]*)")
-	if e.activated == "" then e.activated = nil end
-	-- Three distinct phases after a start, which look identical from the
-	-- outside but mean different things to someone waiting to bind:
-	--   starting     process up, no control connection yet
-	--   registering  talking to NetEase, no registration record yet
-	--   ready        bindable in the app
-	e.ready = (e.running and e.cloud ~= nil and e.activated ~= nil)
+	e.ready = (e.running and e.cloud ~= nil)
 	if not e.running then
 		e.phase = "stopped"
 	elseif e.cloud == nil then
 		e.phase = "starting"
-	elseif e.activated == nil then
-		e.phase = "registering"
 	else
 		e.phase = "ready"
 	end

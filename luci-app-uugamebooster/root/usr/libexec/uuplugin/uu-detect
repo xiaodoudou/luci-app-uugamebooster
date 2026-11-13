@@ -121,7 +121,8 @@ boosted="$( {
 # Report the two states separately so the UI can say which one it is.
 #
 # cloud:     an established connection to UU's control servers
-# activated: the plugin has written its registration record
+# activated: UU's link snapshot (wan_if, MTUs), written once at first bind and
+#            lost on reboot; not a registration record, so the UI ignores it
 cloud=""
 if [ -n "$ours" ]; then
 	cloud=$(netstat -np 2>/dev/null |
