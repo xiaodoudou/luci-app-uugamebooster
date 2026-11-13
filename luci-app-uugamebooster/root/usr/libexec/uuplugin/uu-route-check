@@ -1,0 +1,287 @@
+#!/bin/sh
+
+DETECT="${UU_DETECT:-/usr/libexec/uuplugin/uu-detect}"
+INTERVAL=5
+CLIENT=""
+DEST=""
+PORT=""
+INTERFACE="any"
+REPORT_MAX=2097152
+RUN_DIR=""
+REPORT=""
+SNAPSHOT=""
+ROUTE_DIR=""
+ROUTE_MANIFEST=""
+CAP_PID=""
+SLEEP_PID=""
+SNAP_COUNT=0
+
+usage() {
+	cat <<'EOF'
+Usage: uu-route-check [-c client-ip] [-d destination-ip] [-p port] [-i interface] [-n seconds]
+
+Runs until Ctrl-C. It records UU policy routes, OpenClash nft counters,
+interface counters, and a rotating tcpdump capture when tcpdump is installed.
+The boosted client is detected automatically when -c is omitted.
+EOF
+	exit 0
+}
+
+die() {
+	printf 'uu-route-check: %s\n' "$*" >&2
+	exit 1
+}
+
+valid_addr() {
+	case "$1" in
+		''|*[!0-9A-Fa-f:.]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+valid_iface() {
+	case "$1" in
+		''|*[!A-Za-z0-9_.:-]*) return 1 ;;
+		*) return 0 ;;
+	esac
+}
+
+append_report() {
+	[ -n "$REPORT" ] || return 0
+	printf '%s\n' "$*" >> "$REPORT"
+	rotate_report
+}
+
+say() {
+	printf '%s\n' "$*"
+	append_report "$*"
+}
+
+rotate_report() {
+	local size
+	[ -f "$REPORT" ] || return 0
+	size=$(wc -c < "$REPORT" 2>/dev/null || printf '0')
+	[ "$size" -le "$REPORT_MAX" ] && return 0
+	mv -f "$REPORT" "$REPORT.prev"
+	: > "$REPORT"
+}
+
+route_refresh() {
+	local tables t tmp sum old lines
+	[ -n "$ROUTE_DIR" ] || return 0
+	tables=$(ip -4 rule show 2>/dev/null | awk '
+		{ t = ""; for (i = 1; i <= NF; i++) if ($i == "lookup") t = $(i + 1); if (t ~ /^[0-9]+$/) print t }
+	' | sort -u)
+	: > "$ROUTE_MANIFEST"
+	for t in $tables; do
+		tmp="$ROUTE_DIR/table-$t.routes.tmp"
+		ip -4 route show table "$t" > "$tmp" 2>/dev/null || { rm -f "$tmp"; continue; }
+		sum=$(md5sum "$tmp" 2>/dev/null | awk '{print $1}')
+		old=$(cat "$ROUTE_DIR/table-$t.sha" 2>/dev/null)
+		if [ "$sum" != "$old" ]; then
+			mv -f "$tmp" "$ROUTE_DIR/table-$t.routes"
+			printf '%s\n' "$sum" > "$ROUTE_DIR/table-$t.sha"
+			say "UU route table $t changed; saved $ROUTE_DIR/table-$t.routes"
+		else
+			rm -f "$tmp"
+		fi
+		lines=$(wc -l < "$ROUTE_DIR/table-$t.routes" 2>/dev/null || printf '0')
+		printf 'table=%s lines=%s sha=%s file=%s\n' "$t" "$lines" "$sum" "$ROUTE_DIR/table-$t.routes" >> "$ROUTE_MANIFEST"
+	done
+}
+
+route_get() {
+	if [ "$FAMILY" = "6" ]; then
+		ip -6 route get "$2" from "$1" 2>&1
+	else
+		ip -4 route get "$2" from "$1" 2>&1
+	fi
+}
+
+snapshot() {
+	local ts c
+	SNAP_COUNT=$((SNAP_COUNT + 1))
+	ts=$(date '+%Y-%m-%d %H:%M:%S')
+	{
+		printf '=== %s ===\n' "$ts"
+		printf '[uu-detect]\n'
+		if [ -x "$DETECT" ]; then
+			"$DETECT" 2>/dev/null | grep -E '^(ours|build|foreign|openclash|boosted|blocked|cloud|activated)='
+		else
+			printf '%s\n' "$DETECT is not executable"
+		fi
+		printf '[interfaces]\n'
+		ip -o link show 2>/dev/null
+		printf '[policy rules]\n'
+		ip -4 rule show 2>/dev/null
+		if [ "$FAMILY" = "6" ]; then
+			ip -6 rule show 2>/dev/null
+		fi
+		printf '[route lookups]\n'
+		if [ -n "$DEST" ]; then
+			for c in $CLIENTS; do
+				printf 'client=%s destination=%s\n' "$c" "$DEST"
+				route_get "$c" "$DEST"
+			done
+		else
+			printf '%s\n' 'No destination supplied; packet capture will identify candidates.'
+		fi
+		printf '[UU route tables]\n'
+		ip -4 route show table all 2>/dev/null | grep -E ' dev tun' | head -300
+		printf '[nft rules and counters]\n'
+		nft -a list ruleset 2>/dev/null | grep -E 'uu-sync-|uu_boosted|uu_dev_dests|openclash|XU_ACC_DEVICE|tun16|mark set|MARK' | head -300
+		printf '[nft sets]\n'
+		for s in uu_boosted uu_dev_dests; do
+			printf 'set=%s\n' "$s"
+			nft -a list set inet fw4 "$s" 2>/dev/null | head -120
+		done
+		if command -v conntrack >/dev/null 2>&1 && [ -n "$CLIENTS$DEST" ]; then
+			printf '[conntrack]\n'
+			for c in $CLIENTS; do
+				conntrack -L 2>/dev/null | grep -F "$c"
+			done | head -100
+			[ -z "$DEST" ] || conntrack -L 2>/dev/null | grep -F "$DEST" | head -100
+		fi
+	} > "$SNAPSHOT" 2>&1
+	if [ $((SNAP_COUNT % 6)) -eq 0 ]; then
+		route_refresh
+	fi
+	rotate_report
+	cat "$SNAPSHOT" >> "$REPORT"
+	rotate_report
+	printf '%s snapshot recorded\n' "$ts"
+	if [ -n "$DEST" ]; then
+		grep -E '^(client=|.*route|.*src |.*dev )' "$SNAPSHOT" | head -30
+	fi
+	grep -E 'uu-sync-|openclash' "$SNAPSHOT" | head -20
+}
+
+cleanup() {
+	trap - INT TERM HUP
+	if [ -n "$SLEEP_PID" ]; then
+		kill "$SLEEP_PID" 2>/dev/null
+		wait "$SLEEP_PID" 2>/dev/null
+	fi
+	if [ -n "$CAP_PID" ]; then
+		kill "$CAP_PID" 2>/dev/null
+		wait "$CAP_PID" 2>/dev/null
+	fi
+	printf 'Stopped. Report: %s\n' "$REPORT"
+	printf 'Capture directory: %s\n' "$RUN_DIR"
+	printf 'Send the report and capture files when finished.\n'
+	exit 0
+}
+
+while getopts "c:d:p:i:n:h" opt; do
+	case "$opt" in
+		c) CLIENT="$OPTARG" ;;
+		d) DEST="$OPTARG" ;;
+		p) PORT="$OPTARG" ;;
+		i) INTERFACE="$OPTARG" ;;
+		n) INTERVAL="$OPTARG" ;;
+		h) usage ;;
+		*) usage ;;
+	esac
+done
+shift $((OPTIND - 1))
+[ "$#" -eq 0 ] || die "unexpected argument: $1"
+
+case "$INTERVAL" in
+	''|*[!0-9]*) die "interval must be a positive integer" ;;
+esac
+[ "$INTERVAL" -gt 0 ] || die "interval must be a positive integer"
+if [ -n "$PORT" ]; then
+	case "$PORT" in
+		''|*[!0-9]*) die "port must be numeric" ;;
+	esac
+	[ "$PORT" -ge 1 ] && [ "$PORT" -le 65535 ] || die "port must be between 1 and 65535"
+fi
+valid_iface "$INTERFACE" || die "invalid interface"
+[ -z "$CLIENT" ] || valid_addr "$CLIENT" || die "invalid client address"
+[ -z "$DEST" ] || valid_addr "$DEST" || die "invalid destination address"
+[ "$(id -u 2>/dev/null || printf '1')" = "0" ] || die "run as root"
+
+umask 077
+if command -v mktemp >/dev/null 2>&1; then
+	RUN_DIR=$(mktemp -d "${TMPDIR:-/tmp}/uu-route-check.XXXXXX") || die "could not create run directory"
+else
+	RUN_DIR="${TMPDIR:-/tmp}/uu-route-check.$$"
+	mkdir "$RUN_DIR" || die "could not create run directory"
+fi
+REPORT="$RUN_DIR/report.log"
+SNAPSHOT="$RUN_DIR/snapshot.tmp"
+ROUTE_DIR="$RUN_DIR/routes"
+ROUTE_MANIFEST="$ROUTE_DIR/manifest.txt"
+mkdir "$ROUTE_DIR" || die "could not create route directory"
+: > "$REPORT" || die "could not create report"
+
+if [ -n "$CLIENT" ]; then
+	CLIENTS="$CLIENT"
+else
+	CLIENTS=$("$DETECT" 2>/dev/null | sed -n 's/^boosted=//p' | tr ' ' '\n' | while IFS= read -r c; do
+		[ -n "$c" ] || continue
+		valid_addr "$c" && printf '%s\n' "$c"
+	done | sort -u | tr '\n' ' ')
+	CLIENTS="${CLIENTS% }"
+fi
+[ -n "$CLIENTS$DEST" ] || die "no boosted client found; pass -c or -d"
+
+if [ -n "$DEST" ]; then
+	case "$DEST" in
+		*:*) FAMILY=6 ;;
+		*) FAMILY=4 ;;
+	esac
+else
+	FAMILY=4
+fi
+
+CAPTURE_CLIENT=$(printf '%s\n' $CLIENTS | awk 'NF {print; exit}')
+FILTER='(tcp or udp)'
+[ -z "$CAPTURE_CLIENT" ] || FILTER="host $CAPTURE_CLIENT and $FILTER"
+[ -z "$DEST" ] || FILTER="$FILTER and host $DEST"
+[ -z "$PORT" ] || FILTER="$FILTER and (tcp port $PORT or udp port $PORT)"
+
+trap cleanup INT TERM HUP
+say "UU route diagnostic started"
+say "Run directory: $RUN_DIR"
+say "Clients: ${CLIENTS:-none}"
+say "Destination: ${DEST:-discover from capture}"
+say "Port: ${PORT:-any}"
+say "Interface: $INTERFACE"
+say "Press Ctrl-C to stop"
+
+if command -v tcpdump >/dev/null 2>&1; then
+	CAPTURE="$RUN_DIR/capture.pcap"
+	CAPLOG="$RUN_DIR/tcpdump.log"
+	tcpdump -ni "$INTERFACE" -nn -tttt -s 128 -C 10000 -W 5 -w "$CAPTURE" "$FILTER" > "$CAPLOG" 2>&1 &
+	CAP_PID=$!
+	sleep 1
+	if kill -0 "$CAP_PID" 2>/dev/null; then
+		say "Packet capture started with rotating files"
+	else
+		CAP_PID=""
+		CAPTURE_TEXT="$RUN_DIR/packets.txt"
+		: > "$CAPTURE_TEXT"
+		tcpdump -ni "$INTERFACE" -nn -tttt -l "$FILTER" >> "$CAPTURE_TEXT" 2>&1 &
+		CAP_PID=$!
+		sleep 1
+		if kill -0 "$CAP_PID" 2>/dev/null; then
+			say "Rotating capture unavailable; using live text capture"
+		else
+			CAP_PID=""
+			say "Packet capture could not start; see $CAPLOG"
+		fi
+	fi
+else
+	say "tcpdump is not installed; continuing with route and nft snapshots"
+fi
+
+route_refresh
+snapshot
+while :; do
+	sleep "$INTERVAL" &
+	SLEEP_PID=$!
+	wait "$SLEEP_PID" 2>/dev/null
+	SLEEP_PID=""
+	snapshot
+done

@@ -1,8 +1,18 @@
 #!/bin/sh
-# uu-lib.sh - discovery shared by the coexistence daemons (uu-openclash-sync,
-# uu-ua3f-sync). Sourced, not run: set LOG_TAG first.
+# uu-lib.sh - discovery and plumbing shared by uu-sync and its backends.
+# Sourced, not run: set LOG_TAG first.
+#
+# Two halves, and the split matters:
+#
+#   - what UU itself is doing (boosted devices, its TUNs, the prefixes it
+#     routes, the UDP ports and fwmark it claims) is read from the live system,
+#     never assumed, because it differs between NetEase's builds;
+#   - which proxies exist is a directory listing. Every backend is one file in
+#     uu-sync.d/, so a new proxy integration is a new file rather than another
+#     near-identical daemon to keep in step with the others.
 
 DETECT="/usr/libexec/uuplugin/uu-detect"
+SYNC_DIR="/usr/libexec/uuplugin/uu-sync.d"
 
 # syslog gets the message with its real level. The copy for a human goes to
 # stderr, and only when there is a human: procd also forwards stderr to syslog,
@@ -22,6 +32,43 @@ nap() { sleep "$1" & wait $!; }
 INTERVAL="$(uci_get oc_interval)"; [ -z "$INTERVAL" ] && INTERVAL=5
 MINPFX="$(uci_get oc_min_prefix)";  [ -z "$MINPFX" ] && MINPFX=8
 TUNIF="$(uci_get oc_tun_iface)"
+
+# The UDP ports and fwmark UU claims, when a build does something new and the
+# read-back below gets it wrong. Empty means "read it from UU's own rules".
+UU_UDP_PORTS="$(uci_get oc_uu_udp_ports)"
+UU_MARK_CFG="$(uci_get oc_uu_mark)"
+
+# ------------------------------------------------------------------ backends
+
+# Every proxy integration is a descriptor file, so the list is the directory.
+backends() {
+	local f
+	for f in "$SYNC_DIR"/*.sh; do
+		[ -f "$f" ] || continue
+		basename "$f" .sh
+	done
+}
+
+# One descriptor variable, read without inheriting the descriptor's functions
+# into the caller: backend_var nikki CONFIG
+backend_var() {
+	( . "$SYNC_DIR/$1.sh" >/dev/null 2>&1; eval "printf '%s' \"\$$2\"" )
+}
+
+# Installed, as opposed to merely supported. A backend whose proxy is not on
+# this router is not started and not reported.
+backend_installed() {
+	[ -f "$(backend_var "$1" CONFIG)" ]
+}
+
+# The uci option holding a backend's mode, so the wiring needs no per-proxy
+# knowledge: openclash_mode, nikki_mode, ua3f_mode, homeproxy_mode.
+backend_mode() {
+	local m
+	m="$(uci_get "${1}_mode")"
+	[ -z "$m" ] && m=cooperative
+	echo "$m"
+}
 
 # ------------------------------------------------------------------ discovery
 
@@ -69,10 +116,70 @@ find_tuns() {
 
 # Destination prefixes UU routes into its tunnel, across every one of its TUNs.
 collect_prefixes() {
-	local dev p mask
+	local dev
 	for dev in "$@"; do
 		ip route show table all dev "$dev" 2>/dev/null | awk '{print $1}'
-	done | \
+	done | filter_prefixes
+}
+
+# Routing tables a device's own "from <ip> lookup <table>" rules point at.
+device_tables() {
+	ip rule show 2>/dev/null | awk -v ip="$1" '
+		{ hit = 0
+		  for (i = 1; i < NF; i++)
+			if ($i == "from" && ($(i + 1) == ip || $(i + 1) == ip "/32")) hit = 1 }
+		hit { for (i = 1; i < NF; i++) if ($i == "lookup") print $(i + 1) }' | sort -u
+}
+
+# What UU routes into its TUNs for this one device: only the tables its own
+# rules use, so one device is never exempted for another's game prefixes.
+# Falls back to every TUN's routes when the device's rules lead nowhere, so an
+# unexpected UU layout costs precision rather than the whole exemption.
+device_prefixes() {
+	local ip="$1" t dev out
+	shift
+	out="$(for t in $(device_tables "$ip"); do
+		for dev in "$@"; do
+			ip route show table "$t" dev "$dev" 2>/dev/null | awk '{print $1}'
+		done
+	done | filter_prefixes)"
+	if [ -n "$out" ]; then echo "$out"; else collect_prefixes "$@"; fi
+}
+
+# "<device> . <prefix>" for every boosted device, the element format of a
+# concatenated interval set. Such a set has no auto-merge and rejects a prefix
+# nested inside another, so nested ones are dropped first: CIDR blocks either
+# nest or are disjoint, never partly overlap.
+device_pairs() {
+	local ips="$1" ip
+	shift
+	for ip in $ips; do
+		# Zero-padded and sorted as text: busybox sort ignores per-key "n".
+		device_prefixes "$ip" "$@" | awk -F'[./]' '
+			{ printf "%010.0f %02d %s\n", (($1 * 256 + $2) * 256 + $3) * 256 + $4, $5, $0 }' |
+		sort | awk -v ip="$ip" '
+			{ start = $1; size = 1
+			  for (k = $2; k < 32; k++) size *= 2   # no "^": awk may lack libm
+			  end = start + size - 1
+			  if (n++ && start <= last) next
+			  last = end; print ip " . " $3 }'
+	done
+}
+
+# nft "add element" lines for <family table set> from device_pairs output,
+# chunked: UU can route thousands of prefixes per device.
+pair_batches() {
+	printf '%s\n' "$2" | awk -v t="$1" '
+		NF { l = l (n ? "," : "") $0
+		     if (++n >= 2000) { print "add element " t " { " l " }"; l = ""; n = 0 } }
+		END { if (n) print "add element " t " { " l " }" }'
+}
+
+# The distinct prefixes in device_pairs output, for the status page's count.
+pair_prefixes() { printf '%s\n' "$1" | sed -n 's/.* \. //p' | sort -u; }
+
+filter_prefixes() {
+	local p mask
 	while read -r p; do
 		case "$p" in
 			default|0.0.0.0/0|"") continue ;;
@@ -84,8 +191,53 @@ collect_prefixes() {
 			*)   mask=32; p="$p/32" ;;
 		esac
 		# Guard: never exempt a route broad enough to pull the whole internet
-		# out of OpenClash.
+		# out of the proxy.
 		[ "$mask" -lt "$MINPFX" ] && continue
 		echo "$p"
 	done | sort -u
+}
+
+# The UDP ports UU is actually marking for a device, read off the rules it just
+# installed. Two shapes exist in the wild, and both are matched here:
+#
+#   ip saddr <ip> udp dport 53             ... xt target "MARK"   (OEM, emulated)
+#   ip saddr <ip> udp dport 1025-65535     ... meta mark set 0x163 (generic)
+#
+# The OEM build uses its own bundled iptables-nft, so its rules land in the
+# legacy "ip mangle" table rather than in an XU_ACC_DEVICE_<ip> table. Read both.
+uu_marked_udp_ports() {
+	local ip="$1" t
+	{
+		nft list table ip mangle 2>/dev/null
+		for t in $(nft list tables 2>/dev/null |
+		           sed -n 's/^table ip \(XU_ACC_DEVICE_.*\)$/\1/p'); do
+			nft list table ip "$t" 2>/dev/null
+		done
+	} | awk -v ip="$ip" '
+		index($0, "ip saddr " ip) == 0 { next }
+		!/udp dport/                   { next }
+		!/mark set|xt target "MARK"/   { next }
+		{
+			sub(/.*udp dport /, "")
+			sub(/ (counter|meta|xt|comment|accept|return|jump|goto|drop).*/, "")
+			gsub(/[{}]/, "")
+			gsub(/^[ \t]+|[ \t]+$/, "")
+			# "{ 53, 1025-65535 }" is one rule but two ports; emit them
+			# separately so the caller can merge across devices.
+			n = split($0, part, /[ \t]*,[ \t]*/)
+			for (j = 1; j <= n; j++)
+				if (length(part[j])) print part[j]
+		}'
+}
+
+# The fwmark UU routes a device's traffic with, taken from its own ip rule
+# ("from <ip> fwmark 0x163/0x163 lookup 163"). Scoped to the device so a proxy's
+# own mark, which sits in the same rule range, is never picked up.
+uu_marked_fwmark() {
+	local ip="$1"
+	ip rule show 2>/dev/null | awk -v ip="$ip" '
+		index($0, "from " ip) && /fwmark/ {
+			for (i = 1; i <= NF; i++)
+				if ($i == "fwmark") { split($(i + 1), a, "/"); print a[1]; exit }
+		}'
 }

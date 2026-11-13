@@ -82,10 +82,16 @@ ua3f=""
 nft list table inet UA3F >/dev/null 2>&1 && ua3f="1"
 
 # "tun" when sing-box's own table is up, the only HomeProxy mode
-# uu-homeproxy-sync handles; its other modes hook fw4 and stay "1".
+# the homeproxy backend handles; its other modes hook fw4 and stay "1".
 homeproxy=""
 ubus call service list '{"name":"homeproxy"}' 2>/dev/null | grep -q '"running": true' && homeproxy="1"
 nft list table inet sing-box >/dev/null 2>&1 && homeproxy="tun"
+
+# Nikki keeps everything in a table of its own, which only exists while it is
+# actually intercepting - so its presence is the same statement as OpenClash's
+# chains or UA3F's table.
+nikki=""
+nft list table inet nikki >/dev/null 2>&1 && nikki="1"
 
 # Devices UU is boosting right now.
 #
@@ -121,7 +127,8 @@ boosted="$( {
 # Report the two states separately so the UI can say which one it is.
 #
 # cloud:     an established connection to UU's control servers
-# activated: the plugin has written its registration record
+# activated: UU's link snapshot (wan_if, MTUs), written once at first bind and
+#            lost on reboot; not a registration record, so the UI ignores it
 cloud=""
 if [ -n "$ours" ]; then
 	cloud=$(netstat -np 2>/dev/null |
@@ -200,6 +207,11 @@ echo "foreign=$foreign"
 echo "openclash=$openclash"
 echo "ua3f=$ua3f"
 echo "homeproxy=$homeproxy"
+echo "nikki=$nikki"
+# One line naming every proxy backend and whether it is intercepting, so the
+# status page does not have to grow a key per proxy. The individual keys above
+# stay: they carry more than a yes/no for HomeProxy.
+echo "coexist=openclash:${openclash:-0} nikki:${nikki:-0} homeproxy:${homeproxy:-0} ua3f:${ua3f:-0}"
 echo "boosted=${boosted% }"
 echo "blocked=${blocked# }"
 

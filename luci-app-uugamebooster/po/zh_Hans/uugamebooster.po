@@ -4,316 +4,387 @@ msgstr ""
 "Language: zh_Hans\n"
 "Project-Id-Version: luci-app-uugamebooster\n"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:26
 msgid "UU Game Booster"
 msgstr "UU 游戏加速器"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:27
 msgid "Runs NetEase's UU game accelerator on this router. See the <strong>How to use</strong> tab to get started."
 msgstr "在本路由器上运行网易 UU 游戏加速器。请先查看<strong>使用方法</strong>选项卡。"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:41
 msgid "General"
 msgstr "基本设置"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:42
 msgid "What to boost"
 msgstr "加速对象"
 
-msgid "OpenClash"
-msgstr "OpenClash"
-
-msgid "Device visibility"
-msgstr "设备可见性"
-
-msgid "How to use"
-msgstr "使用方法"
-
-msgid "Enable"
-msgstr "启用"
-
-msgid "Router name"
-msgstr "路由器名称"
-
-msgid "Shown in the UU app, so you can tell routers apart. Changing it after binding means unbinding and binding again."
-msgstr "显示在 UU App 中，便于区分不同路由器。绑定后再修改需要先解绑再重新绑定。"
-
-msgid "Open the firewall for UU's tunnel"
-msgstr "为 UU 隧道开放防火墙"
-
-msgid "Adds a firewall zone for UU's tunnel (tun16+) and lets the LAN forward into it. Required on OpenWrt 22.03 and newer, where forwarding is rejected by default - without it nothing can be boosted."
-msgstr "为 UU 隧道（tun16+）添加防火墙区域，并允许局域网转发至该区域。OpenWrt 22.03 及更高版本默认拒绝转发，因此必须开启，否则无法加速任何设备。"
-
-msgid "Plugin build"
-msgstr "插件版本"
-
-msgid "Game consoles only (recommended)"
-msgstr "仅游戏主机（推荐）"
-
-msgid "Game consoles, PCs and phones"
-msgstr "游戏主机、电脑和手机"
-
-msgid "NetEase ships PC and phone boosting only in the builds it makes for router vendors, which identify themselves to its servers as H3C hardware. Ask for those and the plugin fetches one and works out how to run it:<br />&#8226; on an ARM router it runs directly;<br />&#8226; on x86_64 it runs under emulation - everything needed is bundled, only the plugin itself is downloaded, and CPU use is a little higher.<br />The console-only builds are NetEase's plain OpenWrt ones. They are leaner, but the app will not offer your PC or phone."
-msgstr "网易仅在面向路由器厂商发布的版本中提供电脑和手机加速，这些版本会向服务器声明自己是 H3C 硬件。选择该项后，插件会自动下载并决定如何运行：<br />&#8226; ARM 路由器上直接原生运行；<br />&#8226; x86_64 上通过模拟运行 —— 所需组件已随插件打包，只需下载插件本体，CPU 占用略有增加。<br />仅主机版本是网易的通用 OpenWrt 版本，体积更小，但 App 中不会出现你的电脑或手机。"
-
-msgid "Vendor model"
-msgstr "厂商型号"
-
-msgid "Which vendor build to ask NetEase for. Both behave the same; try the other one if a download fails."
-msgstr "向网易请求哪个厂商版本。两者功能相同，若下载失败可换另一个试试。"
-
-msgid "CPU architecture"
-msgstr "CPU 架构"
-
-msgid "Only needed if the automatic choice is wrong."
-msgstr "仅在自动识别有误时才需要设置。"
-
-msgid "Detect automatically"
-msgstr "自动识别"
-
-msgid "mipsel (little endian)"
-msgstr "mipsel（小端）"
-
-msgid "mipseb (big endian)"
-msgstr "mipseb（大端）"
-
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:43
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:175
 msgid "Coexistence"
 msgstr "共存方式"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:44
+msgid "Device visibility"
+msgstr "设备可见性"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:45
+msgid "How to use"
+msgstr "使用方法"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:49
+msgid "Enable"
+msgstr "启用"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:53
+msgid "Router name"
+msgstr "路由器名称"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:54
+msgid "Shown in the UU app, so you can tell routers apart. Changing it after binding means unbinding and binding again."
+msgstr "显示在 UU App 中，便于区分不同路由器。绑定后再修改需要先解绑再重新绑定。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:59
+msgid "Open the firewall for UU's tunnel"
+msgstr "为 UU 隧道开放防火墙"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:60
+msgid "Adds a firewall zone for UU's tunnel (tun16+) and lets the LAN forward into it. Required on OpenWrt 22.03 and newer, where forwarding is rejected by default - without it nothing can be boosted."
+msgstr "为 UU 隧道（tun16+）添加防火墙区域，并允许局域网转发至该区域。OpenWrt 22.03 及更高版本默认拒绝转发，因此必须开启，否则无法加速任何设备。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:65
+msgid "Proxies on the Coexistence tab"
+msgstr "共存标签页显示的代理"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:66
+msgid "Takes effect after Save &amp; Apply."
+msgstr "保存并应用后生效。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:67
+msgid "Only those installed on this router"
+msgstr "仅本路由器已安装的"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:68
+msgid "Every supported proxy"
+msgstr "所有支持的代理"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:73
+msgid "Plugin build"
+msgstr "插件版本"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:74
+msgid "Game consoles only (recommended)"
+msgstr "仅游戏主机（推荐）"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:75
+msgid "Game consoles, PCs and phones"
+msgstr "游戏主机、电脑和手机"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:77
+msgid "NetEase ships PC and phone boosting only in the builds it makes for router vendors, which identify themselves to its servers as H3C hardware. Ask for those and the plugin fetches one and works out how to run it:<br />&#8226; on an ARM router it runs directly;<br />&#8226; on x86_64 it runs under emulation - everything needed is bundled, only the plugin itself is downloaded, and CPU use is a little higher.<br />The console-only builds are NetEase's plain OpenWrt ones. They are leaner, but the app will not offer your PC or phone."
+msgstr "网易仅在面向路由器厂商发布的版本中提供电脑和手机加速，这些版本会向服务器声明自己是 H3C 硬件。选择该项后，插件会自动下载并决定如何运行：<br />&#8226; ARM 路由器上直接原生运行；<br />&#8226; x86_64 上通过模拟运行 —— 所需组件已随插件打包，只需下载插件本体，CPU 占用略有增加。<br />仅主机版本是网易的通用 OpenWrt 版本，体积更小，但 App 中不会出现你的电脑或手机。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:88
+msgid "Vendor model"
+msgstr "厂商型号"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:89
+msgid "Which vendor build to ask NetEase for. Both behave the same; try the other one if a download fails."
+msgstr "向网易请求哪个厂商版本。两者功能相同，若下载失败可换另一个试试。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:96
+msgid "CPU architecture"
+msgstr "CPU 架构"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:97
+msgid "Only needed if the automatic choice is wrong."
+msgstr "仅在自动识别有误时才需要设置。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:98
+msgid "Detect automatically"
+msgstr "自动识别"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:102
+msgid "mipsel (little endian)"
+msgstr "mipsel（小端）"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:103
+msgid "mipseb (big endian)"
+msgstr "mipseb（大端）"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:123
+msgid "How coexistence works"
+msgstr "共存机制"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:124
+msgid "Left alone, whichever of the two hooks netfilter first wins and the other does nothing. Coexistence moves the dividing line onto UU's side: only what UU actually accelerates leaves the proxy, and only for devices it is boosting. Everything else from that same device keeps going through the proxy - so most of a boosted PC's traffic still showing up there is the intended result, not a fault.<br /><br /><strong>Split the traffic</strong> - the split described above. The recommended one.<br /><strong>Take whole devices off the proxy</strong> - the blunt fallback: a boosted device skips the proxy entirely, whatever it is talking to. For the device that will not split cleanly.<br /><strong>Leave it alone</strong> - the two are left to fight over the packets."
+msgstr "放任不管时，两个钩子里先挂上的那个会悄悄赢，另一个等于没装。共存的做法是把分界线放在 UU 这一侧：只有 UU 真正加速的目标才脱离代理，且只对已加速的设备生效；同一设备的其余流量照常走代理——所以已加速电脑的大部分流量仍出现在代理里，是预期结果，不是故障。<br /><br /><strong>分流</strong>——按上面的规则拆分，推荐。<br><strong>整机排除出代理</strong>——兜底方案：已加速的设备整体不走代理，不管它连的是什么。适用于拆不干净的设备。<br><strong>不做处理</strong>——两边各抢各的。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:142
+msgid "Redirects LAN traffic from chains inside fw4. The exemption is UU's own destination routes, plus the UDP ports and fwmark UU sets - all read back from its live rules, because they differ between builds."
+msgstr "在 fw4 的链里重定向局域网流量。例外项是 UU 自己的目标路由，加上 UU 设置的 UDP 端口和 fwmark——全部从它实际生效的规则里读回来，因为各版本并不一致。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:146
+msgid "Drives mihomo behind an nftables table of its own. DNS is exempted too, because UU sends a boosted device's lookups through its tunnel. Give it a <code>redir-host</code> DNS profile: fake-ip breaks the boost."
+msgstr "驱动 mihomo，用它自己的 nftables 表。DNS 也一并豁免，因为 UU 会把已加速设备的解析请求送进自己的隧道。请给它配 <code>redir-host</code> 的 DNS 配置：fake-ip 会让加速失效。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:150
+msgid "Only its TUN mode with auto-redirect is handled. In its other modes the traffic is hooked inside fw4, out of reach - add the device under HomeProxy's own Access Control instead."
+msgstr "只处理它的 TUN 模式加自动重定向。其他模式下流量是在 fw4 内部挂钩的，够不着——请改为在 HomeProxy 自己的访问控制里添加该设备。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:154
+msgid "Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only TCP is exempted, because that is all UA3F touches."
+msgstr "把局域网 TCP 引流到自己身上来改写 User-Agent。只豁免 TCP，因为 UA3F 也只碰 TCP。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:157
+msgid "Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping a boosted device on PassWall's resolver can hand the game addresses UU does not route, so this is off unless PassWall's DNS matters more."
+msgstr "游戏流量本身就会进入 UU 的隧道，冲突的只有 DNS。让被加速设备继续使用 PassWall 的解析，可能会让游戏拿到 UU 不路由的地址，所以默认关闭，除非 PassWall 的 DNS 对你更重要。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:170
+msgid "Leave it alone (recommended)"
+msgstr "不改动（推荐）"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:171
+msgid "Keep boosted devices on PassWall's DNS"
+msgstr "被加速设备继续使用 PassWall 的 DNS"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:174
 msgid "Split the traffic (recommended)"
 msgstr "分流（推荐）"
 
-msgid "Take whole devices off OpenClash"
-msgstr "让整台设备绕过 OpenClash"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:179
+msgid "Take whole devices off the proxy"
+msgstr "整机排除出代理"
 
-msgid "Leave OpenClash alone"
-msgstr "不改动 OpenClash"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:181
+msgid "Leave it alone"
+msgstr "不做处理"
 
-msgid "UU and OpenClash both intercept LAN traffic, so left alone one of them silently wins.<br /><br /><strong>Split the traffic</strong> lets each handle what it is for. Only what UU actually accelerates leaves OpenClash: the game servers UU routes into its tunnel, plus the UDP ports it marks - both read back from UU's own live rules, for boosted devices only. Everything else from that same device keeps going through OpenClash.<br /><em>So most of a boosted PC's traffic still going through OpenClash is the intended result, not a fault.</em><br /><br /><strong>Take whole devices off OpenClash</strong> is the blunt fallback: the devices you list stop using the proxy entirely while UU runs.<br /><strong>Leave OpenClash alone</strong> changes nothing - useful if you would rather tune OpenClash by hand."
-msgstr "UU 和 OpenClash 都会透明接管局域网流量，若不处理，只会有一方生效。<br /><br /><strong>分流</strong>让两者各司其职。只有 UU 真正加速的流量才会离开 OpenClash：UU 导入隧道的游戏服务器地址，以及它标记的 UDP 端口 —— 这两项都从 UU 的实时规则中读取，且仅对被加速的设备生效。同一台设备的其他流量仍然走 OpenClash。<br /><em>因此，被加速的电脑大部分流量依然经过 OpenClash，这是预期结果，并非故障。</em><br /><br /><strong>让整台设备绕过 OpenClash</strong> 是简单的备选方案：UU 运行期间，列出的设备完全不使用代理。<br /><strong>不改动 OpenClash</strong> 则什么都不做，适合你想手动调整 OpenClash 的情况。"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:192
+msgid "OpenClash: move boosted devices off its bypass list"
+msgstr "OpenClash：把已加速设备移出它的绕过列表"
 
-msgid "Move devices off OpenClash's own bypass list"
-msgstr "将设备移出 OpenClash 自身的绕行列表"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:193
+msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips), and a device on it returns before any finer exemption can apply. Turn this on to take such a device off that list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's config."
+msgstr "OpenClash 维护一份完全跳过代理的设备列表（lan_ac_black_ips），列表里的设备会在更细的例外生效前就直接返回。开启后，设备被加速期间会从该列表移出，结束后放回。默认关闭，因为这会修改并保存 OpenClash 的配置。"
 
-msgid "OpenClash keeps a list of devices that skip the proxy completely (lan_ac_black_ips). A boosted device on that list skips OpenClash for everything, so the split above can do nothing for it. Turn this on to let the plugin take such a device off OpenClash's list while it is boosted and put it back afterwards. Off by default, because it edits and saves OpenClash's configuration."
-msgstr "OpenClash 维护着一份完全跳过代理的设备列表（lan_ac_black_ips）。被加速的设备若在该列表中，所有流量都会跳过 OpenClash，上面的分流便无法生效。开启后，插件会在设备被加速期间将其暂时移出该列表，之后再放回。默认关闭，因为这会修改并保存 OpenClash 的配置。"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:205
+msgid "Re-check interval"
+msgstr "重新检查间隔"
 
-msgid "Devices to bypass - by MAC"
-msgstr "绕行设备 —— 按 MAC"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:206
+msgid "Seconds between re-reads of UU's route list. UU adds and removes game routes while it runs, and every proxy above follows this interval."
+msgstr "单位为秒，两次读取 UU 路由表的间隔。UU 运行时会不断增删游戏路由，上面每个代理都按这个间隔跟随。"
 
-msgid "These stop using OpenClash while UU is running."
-msgstr "UU 运行期间，这些设备不再使用 OpenClash。"
-
-msgid "Devices to bypass - by IP"
-msgstr "绕行设备 —— 按 IP"
-
-msgid "Addresses or CIDR ranges that stop using OpenClash while UU runs."
-msgstr "UU 运行期间不再使用 OpenClash 的地址或 CIDR 网段。"
-
-msgid "How often to re-check UU's routes"
-msgstr "重新检查 UU 路由的间隔"
-
-msgid "In seconds. UU adds and removes game routes as it goes."
-msgstr "单位为秒。UU 会在运行过程中不断增删游戏路由。"
-
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:212
 msgid "Widest route to divert"
 msgstr "允许分流的最大网段"
 
-msgid "A safety limit, as a prefix length: never send a route broader than this around OpenClash. Stops one stray default route from pulling the whole internet out of the proxy."
-msgstr "以前缀长度表示的安全上限：比该值更宽的路由绝不绕过 OpenClash。可避免一条异常的默认路由把整个互联网都带离代理。"
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:213
+msgid "A safety limit, as a prefix length: a route broader than this is never sent around the proxy. Stops one stray default route from pulling the whole internet out of it."
+msgstr "安全阈值，用前缀长度表示：比它更宽的路由永远不会被绕开代理。避免一条误加的默认路由把整个互联网都从代理里拉出去。"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:223
 msgid "Devices UU is allowed to see"
 msgstr "允许 UU 看到的设备"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:224
 msgid "Every device on the network"
 msgstr "网络中的所有设备"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:225
 msgid "Everything except the devices below"
 msgstr "除下列设备之外的全部设备"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:226
 msgid "Only the devices below"
 msgstr "仅下列设备"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:228
 msgid "The UU app lists whatever the plugin finds on your network, which by default is everything. This narrows what it can find at all, so a device left out never appears in the app, is never offered for boosting, and is never reported to NetEase.<br />Nothing else on the router is affected: the real DHCP leases and ARP table are untouched, and no traffic is blocked."
 msgstr "UU App 会列出插件在你网络中发现的所有设备，默认是全部。此设置直接限制插件能发现的范围：未列入的设备不会出现在 App 中，不会被提供加速，也不会上报给网易。<br />路由器的其他部分不受影响：真实的 DHCP 租约和 ARP 表保持原样，也不会拦截任何流量。"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:236
 msgid "By IP address"
 msgstr "按 IP 地址"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:241
 msgid "By MAC address"
 msgstr "按 MAC 地址"
 
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:242
 msgid "Steadier than an IP for anything using DHCP. Resolved to whichever address the device currently holds."
 msgstr "对使用 DHCP 的设备而言比 IP 更稳定。会自动解析为设备当前持有的地址。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:14
 msgid "Steps"
 msgstr "步骤"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:17
 msgid "Turn the service on under <strong>General</strong>, then Save &amp; Apply."
 msgstr "在<strong>基本设置</strong>中启用服务，然后保存并应用。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:18
 msgid "Wait for the panel above to reach <strong>Ready</strong>. Until then the app cannot find this router, even though the service is running."
 msgstr "等待上方面板显示<strong>就绪</strong>。在此之前，即使服务已在运行，App 也找不到这台路由器。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:19
 msgid "Install the UU app and sign in. A NetEase account is required."
 msgstr "安装 UU App 并登录。需要网易账号。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:20
 msgid "In the app, bind this router. It appears under the name set as <strong>Router name</strong>."
 msgstr "在 App 中绑定这台路由器。它会以<strong>路由器名称</strong>中设置的名字显示。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:21
 msgid "Pick the device to boost. Consoles are offered by default; for a PC or phone, set <strong>What to boost</strong> accordingly first."
 msgstr "选择要加速的设备。默认只提供游戏主机；若要加速电脑或手机，请先设置<strong>加速对象</strong>。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:26
 msgid "Get the app"
 msgstr "获取 App"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:33
 msgid "Scan with your phone: iOS on the left, Android on the right."
 msgstr "用手机扫码：左侧为 iOS，右侧为 Android。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:38
 msgid "If a device is missing"
 msgstr "找不到某台设备"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:41
 msgid "Check <strong>Device visibility</strong>. If it is set to a whitelist, the app only ever sees the devices listed there."
 msgstr "请检查<strong>设备可见性</strong>。若设为白名单，App 只能看到其中列出的设备。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:46
 msgid "Good to know"
 msgstr "须知"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:49
 msgid "The UU app and its service are operated by NetEase and are aimed at users in mainland China."
 msgstr "UU App 及其服务由网易运营，主要面向中国大陆用户。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_howto.htm:50
 msgid "Boosting is not always on: traffic only takes UU's tunnel for a device you have picked in the app, and only for the game servers UU routes there."
 msgstr "加速并非始终生效：只有你在 App 中选中的设备、且目标为 UU 导入隧道的游戏服务器时，流量才会走 UU 隧道。"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:84
 msgid "Ready"
 msgstr "就绪"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:86
 msgid "Starting"
 msgstr "正在启动"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:87
 msgid "no connection to NetEase yet"
 msgstr "尚未连接到网易"
 
-msgid "Registering"
-msgstr "正在注册"
-
-msgid "the app cannot find the router yet"
-msgstr "App 暂时还找不到这台路由器"
-
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:89
 msgid "Not running"
 msgstr "未运行"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:90
 msgid "Service"
 msgstr "服务"
 
-msgid "Registration"
-msgstr "注册状态"
-
-msgid "not registered yet"
-msgstr "尚未注册"
-
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:95
 msgid "NetEase link"
 msgstr "网易连接"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:97
 msgid "connecting"
 msgstr "正在连接"
 
-msgid "Conflicting UU installation"
-msgstr "检测到冲突的 UU 安装"
-
-msgid "It owns the PID file, so this service cannot start. Run"
-msgstr "它占用了 PID 文件，本服务无法启动。请运行"
-
-msgid "to hand over."
-msgstr "以接管。"
-
-msgid "vendor build, running natively - consoles, PCs and phones"
-msgstr "厂商版本，原生运行 —— 支持主机、电脑和手机"
-
-msgid "vendor build, emulated - consoles, PCs and phones"
-msgstr "厂商版本，模拟运行 —— 支持主机、电脑和手机"
-
-msgid "standard build - game consoles only"
-msgstr "通用版本 —— 仅支持游戏主机"
-
-msgid "Running"
-msgstr "运行中"
-
-msgid "Tunnel"
-msgstr "隧道"
-
-msgid "none yet"
-msgstr "暂无"
-
-msgid "Boosted devices"
-msgstr "已加速设备"
-
-msgid "none - boost a device in the UU app"
-msgstr "暂无 —— 请在 UU App 中选择要加速的设备"
-
-msgid "not installed"
-msgstr "未安装"
-
-msgid "installed, not running"
-msgstr "已安装，未运行"
-
-msgid "Exempted from proxy"
-msgstr "已排除代理"
-
-msgid "game destinations, for boosted devices only"
-msgstr "个游戏目标地址，仅对已加速设备生效"
-
-msgid "nothing - no device is being boosted"
-msgstr "无 —— 当前没有设备在加速"
-
-msgid "Status"
-msgstr "状态"
-
-msgid "Collecting data..."
-msgstr "正在获取数据…"
-
-msgid "UA3F"
-msgstr "UA3F"
-
-msgid "Keep game traffic out of UA3F (recommended)"
-msgstr "游戏流量不经过 UA3F（推荐）"
-
-msgid "Leave UA3F alone"
-msgstr "不改动 UA3F"
-
-msgid "UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, which also takes a boosted device's game connections away from UU.<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the game servers UU routes into its tunnel, and only for boosted devices. Everything else from that device, its web browsing included, still goes through UA3F.<br /><strong>Leave UA3F alone</strong> changes nothing.<br />Nothing happens unless UA3F is installed and running."
-msgstr "UA3F 通过把局域网的 TCP 流量转给自己来改写 User-Agent，这也会把被加速设备的游戏连接从 UU 手里抢走。<br /><br /><strong>游戏流量不经过 UA3F</strong> 只放行 UU 导入隧道的游戏服务器地址，且仅对被加速的设备生效。该设备的其他流量，包括网页浏览，仍然经过 UA3F。<br /><strong>不改动 UA3F</strong> 则什么都不做。<br />只有在 UA3F 已安装并运行时才会生效。"
-
-msgid "left alone"
-msgstr "未改动"
-
-msgid "Exempted from UA3F"
-msgstr "已排除 UA3F"
-
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:101
 msgid "Will not start after a reboot"
 msgstr "重启后不会自动启动"
 
-msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
-msgstr "此固件的 iptables 没有 DNAT 目标，UU 的 DNS 重定向改由 nftables 处理。"
-
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:102
 msgid "Boot start is off although the service is enabled. Save & Apply, or run"
 msgstr "服务已启用，但开机自启动是关闭的。点击保存并应用，或执行"
 
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:103
 msgid ", to turn it back on."
 msgstr "，即可重新开启。"
 
-# HomeProxy coexistence (uu-homeproxy-sync)
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:107
+msgid "Conflicting UU installation"
+msgstr "检测到冲突的 UU 安装"
 
-msgid "HomeProxy"
-msgstr "HomeProxy"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:109
+msgid "It owns the PID file, so this service cannot start. Run"
+msgstr "它占用了 PID 文件，本服务无法启动。请运行"
 
-msgid "Keep game traffic out of HomeProxy (recommended)"
-msgstr "游戏流量不经过 HomeProxy（推荐）"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:110
+msgid "to hand over."
+msgstr "以接管。"
 
-msgid "Leave HomeProxy alone"
-msgstr "不改动 HomeProxy"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:114
+msgid "vendor build, running natively - consoles, PCs and phones"
+msgstr "厂商版本，原生运行 —— 支持主机、电脑和手机"
 
-msgid "Exempted from HomeProxy"
-msgstr "已排除 HomeProxy"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:115
+msgid "vendor build, emulated - consoles, PCs and phones"
+msgstr "厂商版本，模拟运行 —— 支持主机、电脑和手机"
 
-msgid "Only its TUN mode with auto-redirect is handled. See the HomeProxy tab."
-msgstr "只处理它的 TUN + auto-redirect 模式，详见 HomeProxy 标签页。"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:116
+msgid "standard build - game consoles only"
+msgstr "通用版本 —— 仅支持游戏主机"
 
-msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely.<br />The polling interval and widest route come from the OpenClash tab."
-msgstr "HomeProxy 使用 TUN 入站并开启 auto-redirect 时，会在 UU 路由之前把局域网的 TCP 转给 sing-box，所以被加速设备的游戏连接会失败，而 UDP 仍然正常。<br /><br /><strong>游戏流量不经过 HomeProxy</strong> 放行 UU 导入隧道的游戏服务器地址以及该设备的 DNS，且仅对被加速的设备生效。该设备的其他流量仍然经过 HomeProxy。<br /><strong>不改动 HomeProxy</strong> 则什么都不做。<br /><br />HomeProxy 的其他模式不在处理范围内。这种情况下，请在 HomeProxy 的访问控制里把代理过滤模式设为<em>仅允许列表外</em>，并添加该设备；它会完全不经过 HomeProxy。<br />轮询间隔和最宽路由沿用 OpenClash 标签页的设置。"
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:118
+msgid "Running"
+msgstr "运行中"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:120
+msgid "iptables here has no DNAT target; nftables handles the UU DNS redirect instead."
+msgstr "此固件的 iptables 没有 DNAT 目标，UU 的 DNS 重定向改由 nftables 处理。"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:122
+msgid "Tunnel"
+msgstr "隧道"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:124
+msgid "none yet"
+msgstr "暂无"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:126
+msgid "Boosted devices"
+msgstr "已加速设备"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:129
+msgid "none - boost a device in the UU app"
+msgstr "暂无 —— 请在 UU App 中选择要加速的设备"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:142
+msgid "left alone"
+msgstr "未改动"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:150
+msgid "not running"
+msgstr "未运行"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:163
+msgid "devices excluded"
+msgstr "台设备已排除"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:164
+msgid "exempted"
+msgstr "项例外"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:166
+msgid "nothing to exempt"
+msgstr "无例外"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:171
+msgid "Only its TUN mode with auto-redirect is handled."
+msgstr "只处理 TUN 模式加自动重定向的情况。"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:215
+msgid "Status"
+msgstr "状态"
+
+#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:216
+msgid "Collecting data..."
+msgstr "正在获取数据…"

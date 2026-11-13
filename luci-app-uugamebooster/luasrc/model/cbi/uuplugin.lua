@@ -1,6 +1,26 @@
-local mp, s, o
+local mp, s, o, fs, ctl
 require("luci.util")
 require("luci.sys")
+
+fs = require("nixio.fs")
+-- The list of proxies lives in uu-sync.d/ as descriptor files, and this form is
+-- built from them: a second hard-coded list here would be the thing that drifts
+-- from the scripts next.
+ctl = require("luci.controller.uuplugin")
+
+-- A proxy counts as installed when its config exists, the same test the init
+-- script makes before starting its backend. "all" lists every supported one.
+local show_all = require("luci.model.uci").cursor():get_first("uuplugin", "uuplugin", "coex_tabs") == "all"
+local proxies = {}
+for _, b in ipairs(ctl.backends()) do
+	if show_all or (b.config ~= "" and fs.access(b.config)) then
+		proxies[#proxies + 1] = b
+	end
+end
+-- PassWall has no engine descriptor (it works in iptables), but sits here too.
+if show_all or fs.access("/etc/config/passwall") then
+	proxies[#proxies + 1] = { id = "passwall", label = "PassWall", config = "/etc/config/passwall" }
+end
 
 mp = Map("uuplugin")
 mp.title = translate("UU Game Booster")
@@ -20,9 +40,7 @@ s.addremove = false
 
 s:tab("general", translate("General"))
 s:tab("build",   translate("What to boost"))
-s:tab("clash",   translate("OpenClash"))
-s:tab("ua3f",    translate("UA3F"))
-s:tab("homeproxy", translate("HomeProxy"))
+if #proxies > 0 then s:tab("coexist", translate("Coexistence")) end
 s:tab("devices", translate("Device visibility"))
 s:tab("howto",   translate("How to use"))
 
@@ -43,6 +61,12 @@ o = s:taboption("general", Flag, "addfw",
 		"forward into it. Required on OpenWrt 22.03 and newer, where forwarding " ..
 		"is rejected by default - without it nothing can be boosted."))
 o.default = 1
+
+o = s:taboption("general", ListValue, "coex_tabs", translate("Proxies on the Coexistence tab"),
+	translate("Takes effect after Save &amp; Apply."))
+o:value("auto", translate("Only those installed on this router"))
+o:value("all", translate("Every supported proxy"))
+o.default = "auto"
 
 -- ------------------------------------------------------------ plugin build
 
@@ -81,102 +105,117 @@ o.default = ""
 o.rmempty = true
 o:depends("arch", "auto")
 
--- --------------------------------------------------------------- OpenClash
+-- ------------------------------------------------------------- coexistence
 
-o = s:taboption("clash", ListValue, "openclash_mode", translate("Coexistence"))
-o:value("cooperative", translate("Split the traffic (recommended)"))
-o:value("bypass", translate("Take whole devices off OpenClash"))
-o:value("off", translate("Leave OpenClash alone"))
-o.default = "cooperative"
+-- UU and a transparent proxy both intercept LAN traffic, so left alone one of
+-- them silently wins. Every proxy gets the same choices, because the fix is the
+-- same for all of them: exempt only what UU actually accelerates, and only for
+-- devices it is boosting. What that exemption has to look like differs per
+-- proxy, and that is what its descriptor in uu-sync.d/ encodes - so this form
+-- asks one question per installed proxy and nothing about how it works.
+--
+-- The explanation is written once, above the proxies, rather than as the
+-- description of every one of them: with four installed it was the same four
+-- paragraphs, four times, and the answer took scrolling to find.
+
+if #proxies > 0 then
+o = s:taboption("coexist", DummyValue, "_coexist_why",
+	translate("How coexistence works"))
 o.description = translate(
-	"UU and OpenClash both intercept LAN traffic, so left alone one of them " ..
-	"silently wins." ..
-	"<br /><br /><strong>Split the traffic</strong> lets each handle what it is " ..
-	"for. Only what UU actually accelerates leaves OpenClash: the game servers " ..
-	"UU routes into its tunnel, plus the UDP ports it marks - both read back " ..
-	"from UU's own live rules, for boosted devices only. Everything else from " ..
-	"that same device keeps going through OpenClash." ..
-	"<br /><em>So most of a boosted PC's traffic still going through OpenClash " ..
-	"is the intended result, not a fault.</em>" ..
-	"<br /><br /><strong>Take whole devices off OpenClash</strong> is the blunt " ..
-	"fallback: the devices you list stop using the proxy entirely while UU runs." ..
-	"<br /><strong>Leave OpenClash alone</strong> changes nothing - useful if " ..
-	"you would rather tune OpenClash by hand.")
+	"Left alone, whichever of the two hooks netfilter first wins and the other " ..
+	"does nothing. Coexistence moves the dividing line onto UU's side: only " ..
+	"what UU actually accelerates leaves the proxy, and only for devices it is " ..
+	"boosting. Everything else from that same device keeps going through the " ..
+	"proxy - so most of a boosted PC's traffic still showing up there is the " ..
+	"intended result, not a fault." ..
+	"<br /><br /><strong>Split the traffic</strong> - the split described " ..
+	"above. The recommended one." ..
+	"<br /><strong>Take whole devices off the proxy</strong> - the blunt " ..
+	"fallback: a boosted device skips the proxy entirely, whatever it is " ..
+	"talking to. For the device that will not split cleanly." ..
+	"<br /><strong>Leave it alone</strong> - the two are left to fight over the " ..
+	"packets.")
 
-o = s:taboption("clash", Flag, "oc_manage_lan_ac",
-	translate("Move devices off OpenClash's own bypass list"),
-	translate("OpenClash keeps a list of devices that skip the proxy completely " ..
-		"(lan_ac_black_ips). A boosted device on that list skips OpenClash for " ..
-		"everything, so the split above can do nothing for it. Turn this on to " ..
-		"let the plugin take such a device off OpenClash's list while it is " ..
-		"boosted and put it back afterwards. Off by default, because it edits " ..
-		"and saves OpenClash's configuration."))
-o.default = 0
-o:depends("openclash_mode", "cooperative")
+-- One short line each. Anything longer repeats what the paragraph above already
+-- said, and the detail lives in docs/ anyway.
+local NOTE = {
+	openclash = translate(
+		"Redirects LAN traffic from chains inside fw4. The exemption is UU's own " ..
+		"destination routes, plus the UDP ports and fwmark UU sets - all read " ..
+		"back from its live rules, because they differ between builds."),
+	nikki = translate(
+		"Drives mihomo behind an nftables table of its own. DNS is exempted too, " ..
+		"because UU sends a boosted device's lookups through its tunnel. Give it " ..
+		"a <code>redir-host</code> DNS profile: fake-ip breaks the boost."),
+	homeproxy = translate(
+		"Only its TUN mode with auto-redirect is handled. In its other modes the " ..
+		"traffic is hooked inside fw4, out of reach - add the device under " ..
+		"HomeProxy's own Access Control instead."),
+	ua3f = translate(
+		"Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only " ..
+		"TCP is exempted, because that is all UA3F touches."),
+	passwall = translate(
+		"Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping " ..
+		"a boosted device on PassWall's resolver can hand the game addresses UU " ..
+		"does not route, so this is off unless PassWall's DNS matters more."),
+}
 
-o = s:taboption("clash", DynamicList, "oc_bypass_mac",
-	translate("Devices to bypass - by MAC"),
-	translate("These stop using OpenClash while UU is running."))
-o.datatype = "macaddr"
-o:depends("openclash_mode", "bypass")
+local has_openclash = false
+for _, b in ipairs(proxies) do
+	if b.id == "openclash" then has_openclash = true end
 
-o = s:taboption("clash", DynamicList, "oc_bypass_ip",
-	translate("Devices to bypass - by IP"),
-	translate("Addresses or CIDR ranges that stop using OpenClash while UU runs."))
-o.datatype = "ipaddr"
-o:depends("openclash_mode", "bypass")
+	o = s:taboption("coexist", ListValue, b.id .. "_mode", b.label)
+	if b.id == "passwall" then
+		-- Not a split: the only thing it changes is where DNS goes.
+		o:value("off", translate("Leave it alone (recommended)"))
+		o:value("cooperative", translate("Keep boosted devices on PassWall's DNS"))
+		o.default = "off"
+	else
+		o:value("cooperative", translate("Split the traffic (recommended)"))
+		-- UA3F is not a proxy: it rewrites User-Agents and hands the
+		-- connection back to the router. "Off the proxy" would be the wrong
+		-- words for it, so it gets the two choices that mean something.
+		if b.id ~= "ua3f" then
+			o:value("bypass", translate("Take whole devices off the proxy"))
+		end
+		o:value("off", translate("Leave it alone"))
+		o.default = "cooperative"
+	end
+	o.description = NOTE[b.id]
+end
 
-o = s:taboption("clash", Value, "oc_interval",
-	translate("How often to re-check UU's routes"),
-	translate("In seconds. UU adds and removes game routes as it goes."))
+-- OpenClash keeps a list of devices that skip the proxy completely. A boosted
+-- device on that list skips OpenClash for everything, so splitting it is a
+-- no-op until it is taken off.
+if has_openclash then
+	o = s:taboption("coexist", Flag, "oc_manage_lan_ac",
+		translate("OpenClash: move boosted devices off its bypass list"),
+		translate("OpenClash keeps a list of devices that skip the proxy " ..
+			"completely (lan_ac_black_ips), and a device on it returns before " ..
+			"any finer exemption can apply. Turn this on to take such a device " ..
+			"off that list while it is boosted and put it back afterwards. Off " ..
+			"by default, because it edits and saves OpenClash's config."))
+	o.default = 0
+	o:depends("openclash_mode", "cooperative")
+end
+
+-- Tuning, for all proxies at once: the poll and the prefix limit are properties
+-- of the engine, not of any one proxy.
+o = s:taboption("coexist", Value, "oc_interval",
+	translate("Re-check interval"),
+	translate("Seconds between re-reads of UU's route list. UU adds and removes " ..
+		"game routes while it runs, and every proxy above follows this interval."))
 o.datatype = "range(1,60)"
 o.default = "5"
-o:depends("openclash_mode", "cooperative")
 
-o = s:taboption("clash", Value, "oc_min_prefix",
+o = s:taboption("coexist", Value, "oc_min_prefix",
 	translate("Widest route to divert"),
-	translate("A safety limit, as a prefix length: never send a route broader " ..
-		"than this around OpenClash. Stops one stray default route from pulling " ..
-		"the whole internet out of the proxy."))
+	translate("A safety limit, as a prefix length: a route broader than this is " ..
+		"never sent around the proxy. Stops one stray default route from " ..
+		"pulling the whole internet out of it."))
 o.datatype = "range(1,32)"
 o.default = "8"
-o:depends("openclash_mode", "cooperative")
-
--- -------------------------------------------------------------------- UA3F
-
-o = s:taboption("ua3f", ListValue, "ua3f_mode", translate("Coexistence"))
-o:value("cooperative", translate("Keep game traffic out of UA3F (recommended)"))
-o:value("off", translate("Leave UA3F alone"))
-o.default = "cooperative"
-o.description = translate(
-	"UA3F rewrites the User-Agent of LAN traffic by diverting TCP to itself, " ..
-	"which also takes a boosted device's game connections away from UU." ..
-	"<br /><br /><strong>Keep game traffic out of UA3F</strong> exempts only the " ..
-	"game servers UU routes into its tunnel, and only for boosted devices. " ..
-	"Everything else from that device, its web browsing included, still goes " ..
-	"through UA3F." ..
-	"<br /><strong>Leave UA3F alone</strong> changes nothing." ..
-	"<br />Nothing happens unless UA3F is installed and running.")
-
--- --------------------------------------------------------------- HomeProxy
-
-o = s:taboption("homeproxy", ListValue, "homeproxy_mode", translate("Coexistence"))
-o:value("cooperative", translate("Keep game traffic out of HomeProxy (recommended)"))
-o:value("off", translate("Leave HomeProxy alone"))
-o.default = "cooperative"
-o.description = translate(
-	"With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to " ..
-	"sing-box before UU can route it, so a boosted device's game connections " ..
-	"fail while its UDP still works." ..
-	"<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the " ..
-	"game servers UU routes into its tunnel, and the device's DNS, only for " ..
-	"boosted devices. Everything else from that device still goes through " ..
-	"HomeProxy." ..
-	"<br /><strong>Leave HomeProxy alone</strong> changes nothing." ..
-	"<br /><br />HomeProxy's other modes are not handled. There, add the device " ..
-	"under HomeProxy's Access Control, with <em>Proxy all except listed</em>; " ..
-	"it then skips HomeProxy entirely." ..
-	"<br />The polling interval and widest route come from the OpenClash tab.")
+end
 
 -- ------------------------------------------------------------ device list
 

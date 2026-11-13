@@ -1,0 +1,381 @@
+#!/bin/sh
+# uu-sync - the one engine behind every proxy-coexistence backend.
+#
+# Usage: uu-sync <backend> [cooperative|bypass]
+#        uu-sync <backend> cleanup
+#
+# WHY ONE SCRIPT
+# --------------
+# There used to be three daemons - uu-openclash-sync, uu-ua3f-sync and
+# uu-homeproxy-sync - and they were the same program three times over: poll
+# UU's state, keep two nftables sets in the proxy's table, insert `return`
+# rules carrying a comment tag, re-insert them whenever the proxy rebuilt its
+# tables, tear everything down when UU stopped. Only three things actually
+# differed: which table, which chains, and what the exempted packet looks
+# like. Adding a fourth proxy meant copying a fifth of the code again, which is
+# how the copies started to drift.
+#
+# So the difference is now data. A backend is a descriptor in uu-sync.d/ that
+# answers those three questions plus a couple of optional hooks; this file owns
+# the loop, the sets, the reconciliation, the locking and the cleanup. Adding a
+# proxy is adding a file. See uu-sync.d/nikki.sh for the smallest one.
+#
+# WHAT MAKES IT IDEMPOTENT
+# ------------------------
+# Every rule this engine inserts carries a "uu-sync-*" comment. Reconciliation
+# compares the tags present in a chain against the tags wanted, deletes the ones
+# that no longer apply and inserts the ones that are missing. That is what makes
+# a proxy reload - which discards our rules wholesale - repair itself on the
+# next poll without ever stacking duplicates, and what lets a backend change its
+# mind about which exemptions it wants (OpenClash's UDP slice and fwmark) without
+# leaving the old ones behind.
+#
+# A BACKEND PROVIDES
+# ------------------
+#   NAME, LABEL, CONFIG       descriptor name, what to call it, and the uci file
+#                             whose presence means "installed"
+#   sync_family               nftables family: inet
+#   sync_table                table name inside that family
+#   sync_chains               the chains to act on, one per line; empty means
+#                             the proxy is not intercepting yet
+#   sync_dest_match           (optional) the destination exemption's match
+#                             expression; defaults to source+destination
+#   sync_extra_rules <ips>    (optional) further "tag|match" lines, e.g. DNS
+#   sync_before_apply <ips>   (optional) run before the sets are rebuilt
+#   sync_on_cleanup           (optional) undo whatever sync_before_apply did
+#
+# Both modes run the same loop over the same sets. What differs is one match
+# expression: cooperative exempts a boosted device's traffic *to somewhere UU
+# routes*, bypass exempts the device outright. Neither writes the proxy's
+# configuration, so switching between them costs a rule swap and nothing else.
+
+BACKEND="$1"
+MODE="${2:-cooperative}"
+
+[ -n "$BACKEND" ] || { echo "usage: $0 <backend> [cooperative|bypass|cleanup]" >&2; exit 1; }
+LOG_TAG="uu-$BACKEND"
+. /usr/libexec/uuplugin/uu-lib.sh
+
+DESC="$SYNC_DIR/$BACKEND.sh"
+[ -f "$DESC" ] || { echo "uu-sync: no such backend: $BACKEND" >&2; exit 1; }
+. "$DESC"
+
+FAMILY="$(sync_family)"
+TBL="$(sync_table)"
+
+# The two sets are ours, not the proxy's, but they have to live in the proxy's
+# table: an nftables rule cannot reference another table's set.
+SET_SRC="uu_boosted"
+SET_DST="uu_dev_dests"
+SET_OLD="uu_dests"
+# Comment tags of the per-proxy daemons this engine replaced.
+LEGACY_TAGS="uu-coop-|uu-hp-|uu-ua3f-"
+
+# Rule tags are how reconciliation knows what it owns. The prefix is also what
+# cleanup greps for, so nothing here may be abbreviated.
+TAG_PREFIX="uu-sync-"
+TAG_DEST="${TAG_PREFIX}dest"
+TAG_BYPASS="${TAG_PREFIX}bypass"
+
+STATE="/var/run/uu-$BACKEND.state"
+SIG="/var/run/uu-$BACKEND.sig"
+WANT="/var/run/uu-$BACKEND.want"
+NFT_TMP="/tmp/.uu-$BACKEND.nft"
+LOCK_DIR="/var/run/uu-$BACKEND.lock"
+
+# ------------------------------------------------------------------ nftables
+
+# The destination set is keyed on device and prefix together, so each device is
+# exempted only for what UU routes for it (device_pairs in uu-lib.sh).
+ensure_sets() {
+	nft add set $FAMILY $TBL "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
+	nft add set $FAMILY $TBL "$SET_DST" '{ type ipv4_addr . ipv4_addr; flags interval; }' 2>/dev/null
+}
+
+have_sets() { nft list set $FAMILY $TBL "$SET_DST" >/dev/null 2>&1; }
+
+# Our tags present in a chain, one per line.
+tags_in() {
+	nft -a list chain $FAMILY $TBL "$1" 2>/dev/null |
+		sed -n "s/.*comment \"\($TAG_PREFIX[^\"]*\)\".*/\1/p"
+}
+
+has_any_rule() {
+	local c
+	for c in $(sync_chains); do
+		nft list chain $FAMILY $TBL "$c" 2>/dev/null | grep -q "$TAG_PREFIX" && return 0
+	done
+	return 1
+}
+
+del_tag() {
+	local c="$1" t="$2" h
+	# By handle, highest first, so earlier handles stay valid while we delete.
+	for h in $(nft -a list chain $FAMILY $TBL "$c" 2>/dev/null |
+	           grep "comment \"$t\"" |
+	           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+		nft delete rule $FAMILY $TBL "$c" handle "$h" 2>/dev/null
+	done
+}
+
+# Rules a pre-engine daemon left behind, e.g. one killed rather than stopped
+# during an upgrade. Their sets can only be deleted once these are gone.
+del_legacy() {
+	local c h
+	for c in $(sync_chains); do
+		for h in $(nft -a list chain $FAMILY $TBL "$c" 2>/dev/null |
+		           grep -E "comment \"($LEGACY_TAGS)" |
+		           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+			nft delete rule $FAMILY $TBL "$c" handle "$h" 2>/dev/null
+		done
+	done
+	nft delete set $FAMILY $TBL "$SET_OLD" 2>/dev/null
+}
+
+# Make one chain match "$want" exactly: "tag|match" lines. Rules are inserted at
+# the top, because an exemption that sits below the proxy's own decision is not
+# an exemption.
+reconcile_chain() {
+	local c="$1" want="$2" have tag match
+	have="$(tags_in "$c")"
+
+	for tag in $have; do
+		printf '%s\n' "$want" | grep -q "^$tag|" || del_tag "$c" "$tag"
+	done
+
+	printf '%s\n' "$want" | while IFS='|' read -r tag match; do
+		[ -n "$tag" ] && [ -n "$match" ] || continue
+		printf '%s\n' "$have" | grep -qx "$tag" && continue
+		nft insert rule $FAMILY $TBL "$c" $match counter return \
+			comment "\"$tag\"" 2>/dev/null
+	done
+}
+
+# Replace both sets in a single atomic nft run. Adding thousands of elements one
+# "nft add element" at a time would fork that many times per poll and never
+# finish; chunking keeps any single statement reasonable.
+apply_sets() {
+	local ips="$1" pairs="$2"
+	{
+		echo "flush set $FAMILY $TBL $SET_SRC"
+		if [ -n "$ips" ]; then
+			echo "add element $FAMILY $TBL $SET_SRC { $(echo $ips | tr ' ' ',') }"
+		fi
+		echo "flush set $FAMILY $TBL $SET_DST"
+		pair_batches "$FAMILY $TBL $SET_DST" "$pairs"
+	} > "$NFT_TMP"
+
+	nft -f "$NFT_TMP" 2>/dev/null
+}
+
+# ------------------------------------------------------------------ intent
+
+# The destination exemption, which is the same idea everywhere: traffic that is
+# both from a boosted device and to somewhere UU routes does not belong to the
+# proxy. A backend may narrow it (UA3F only touches TCP) but not widen it.
+dest_match() {
+	if type sync_dest_match >/dev/null 2>&1; then
+		sync_dest_match
+	else
+		echo "ip saddr . ip daddr @$SET_DST"
+	fi
+}
+
+# What this backend wants, right now, in every one of its chains. Bypass wants
+# one rule and no destination set at all: the device leaves the proxy whichever
+# way its traffic is headed, which is exactly the difference from cooperative.
+desired_rules() {
+	local ips="$1" mode="$2"
+	if [ "$mode" = "bypass" ]; then
+		echo "$TAG_BYPASS|ip saddr @$SET_SRC"
+		return 0
+	fi
+	echo "$TAG_DEST|$(dest_match)"
+	type sync_extra_rules >/dev/null 2>&1 && sync_extra_rules "$ips"
+	return 0
+}
+
+# ------------------------------------------------------------------ teardown
+
+teardown() {
+	local c tag
+	for c in $(sync_chains); do
+		for tag in $(tags_in "$c"); do
+			del_tag "$c" "$tag"
+		done
+	done
+	del_legacy
+	# Sets last: a set still referenced by a rule cannot be deleted.
+	nft delete set $FAMILY $TBL "$SET_SRC" 2>/dev/null
+	nft delete set $FAMILY $TBL "$SET_DST" 2>/dev/null
+	rm -f "$WANT"
+}
+
+cleanup() {
+	teardown
+	type sync_on_cleanup >/dev/null 2>&1 && sync_on_cleanup
+	rm -f "$STATE" "$SIG" "$NFT_TMP"
+	log "$LABEL exemptions removed."
+}
+
+# -------------------------------------------------------------- the poll loop
+
+# One loop for both modes. Taking a device off the proxy never needed to touch
+# the proxy's configuration - the device's own traffic is enough to act on - so
+# bypass is no longer a separate code path, a separate apply step, and a proxy
+# restart: it is the same loop with one less condition in the match.
+run_sync() {
+	local mode="$1" ips pairs prefixes sig prev want up="" c t
+
+	rm -f "$WANT"
+	: > "$STATE"
+	while :; do
+		if [ -z "$(sync_chains)" ]; then
+			# The proxy stopped, or is rebuilding its tables: its chains are
+			# gone and our rules with them, so the next pass that finds it back
+			# has to refill the sets.
+			[ "$up" = "1" ] && log "$LABEL is not intercepting; waiting for it."
+			up=0
+			rm -f "$SIG"
+			: > "$STATE"
+			nap "$INTERVAL"
+			continue
+		fi
+		if [ "$up" != "1" ]; then
+			log "$LABEL found (poll: ${INTERVAL}s, min prefix: /$MINPFX)."
+			del_legacy
+		fi
+		up=1
+
+		ips="$(boosted_ips)"
+		if [ -z "$ips" ]; then
+			# Nothing is being boosted. Put the proxy back exactly as it would
+			# behave without this plugin. The live state is checked as well as
+			# the signature file: after a daemon restart the signature is gone
+			# but stale elements can still be in the set.
+			if [ -s "$SIG" ] || have_sets || has_any_rule; then
+				log "No devices boosted; removing the $LABEL exemptions."
+				teardown
+				type sync_on_cleanup >/dev/null 2>&1 && sync_on_cleanup
+				rm -f "$SIG"
+				: > "$STATE"
+			fi
+			nap "$INTERVAL"
+			continue
+		fi
+
+		# Only cooperative cares where the traffic is headed, so bypass skips
+		# reading UU's destination prefixes altogether.
+		pairs=""
+		if [ "$mode" = "cooperative" ]; then
+			pairs="$(device_pairs "$ips" $(find_tuns))"
+		fi
+		prefixes="$(pair_prefixes "$pairs")"
+		sig="$(printf '%s|%s|%s' "$mode" "$ips" "$pairs" | md5sum | awk '{print $1}')"
+		prev="$(cat "$SIG" 2>/dev/null)"
+
+		# A proxy or fw4 reload drops the sets but leaves the signature behind,
+		# so recreated sets have to be refilled whatever it says.
+		if ! have_sets; then
+			ensure_sets
+			prev=""
+		fi
+		type sync_before_apply >/dev/null 2>&1 && sync_before_apply "$ips"
+
+		# Always re-check the rules, not only when the signature changed: a
+		# proxy reload wipes them while everything else stays the same. A rule
+		# whose match changed (another device's mark, another UDP slice) keeps
+		# its tag, so a changed wish list replaces every rule rather than
+		# leaving the stale one in place.
+		want="$(desired_rules "$ips" "$mode")"
+		if [ "$want" != "$(cat "$WANT" 2>/dev/null)" ]; then
+			for c in $(sync_chains); do
+				for t in $(tags_in "$c"); do del_tag "$c" "$t"; done
+			done
+			printf '%s\n' "$want" > "$WANT"
+		fi
+		for c in $(sync_chains); do
+			reconcile_chain "$c" "$want"
+		done
+
+		if [ "$sig" != "$prev" ]; then
+			if apply_sets "$ips" "$pairs"; then
+				echo "$sig" > "$SIG"
+				if [ "$mode" = "bypass" ]; then
+					printf '%s\n' $ips > "$STATE"
+					log "Boosted: $(echo $ips | tr '\n' ' ')- excluded from" \
+					    "$LABEL entirely."
+				else
+					# "echo $empty > file" still writes a newline, which the
+					# status page would count as one prefix.
+					if [ -n "$prefixes" ]; then
+						printf '%s\n' "$prefixes" > "$STATE"
+					else
+						: > "$STATE"
+					fi
+					log "Boosted: $(echo $ips | tr '\n' ' ')- exempting" \
+					    "$(echo "$prefixes" | grep -c .) destination prefix(es)" \
+					    "from $LABEL."
+				fi
+			else
+				err "Failed to apply nftables sets (see $NFT_TMP)."
+			fi
+		fi
+
+		nap "$INTERVAL"
+	done
+}
+
+# ------------------------------------------------------------------ locking
+
+# One writer at a time. procd starts this on service start; a leftover manual run
+# would race it - two pollers insert the same rules twice or fight over cleanup.
+# mkdir is the atomic test-and-set busybox always has; a lock left behind by a
+# killed instance is detected via the recorded pid and cleared.
+single_instance() {
+	local pid
+	if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+		pid=$(cat "$LOCK_DIR/pid" 2>/dev/null)
+		# cmdline is NUL-separated, so it has to be flattened before grep:
+		# matching "uu-sync $BACKEND" against the raw file can never succeed,
+		# which would make every new instance treat a live lock as stale and
+		# clear it - defeating the lock exactly when it is needed.
+		if [ -n "$pid" ] && [ -d "/proc/$pid" ] &&
+		   tr '\0' ' ' < "/proc/$pid/cmdline" 2>/dev/null |
+			grep -q "uu-sync $BACKEND "; then
+			log "Another instance is running (pid $pid); exiting."
+			exit 0
+		fi
+		log "Removing a stale lock."
+		rm -rf "$LOCK_DIR"
+		mkdir "$LOCK_DIR" 2>/dev/null || exit 1
+	fi
+	echo "$$" > "$LOCK_DIR/pid"
+}
+
+# ------------------------------------------------------------------- entry
+
+case "$MODE" in
+	cleanup)
+		# Deliberately leaves $LOCK_DIR alone. This runs from stop_service,
+		# where our daemon is often still alive for a moment: deleting its
+		# lock would strip a running instance of single-instance protection,
+		# and a second one could then start alongside it. The daemon's own
+		# TERM handler removes the lock, and a lock left behind by SIGKILL is
+		# cleared by the staleness check on the next start.
+		cleanup
+		;;
+	cooperative|bypass)
+		single_instance
+		# The handler must exit: a bare "trap cleanup" tears the integration
+		# down and then falls back into the poll loop, leaving a daemon that
+		# ignored SIGTERM and has to be SIGKILLed, with its exemptions already
+		# removed.
+		trap 'cleanup; rm -rf "$LOCK_DIR"; exit 0' INT TERM
+		run_sync "$MODE"
+		;;
+	*)
+		err "Unknown mode '$MODE'"
+		exit 1
+		;;
+esac
