@@ -190,7 +190,10 @@ msgid "Leave HomeProxy alone"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:167
-msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely.<br />The polling interval and widest route come from the OpenClash tab."
+msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely."
+msgstr ""
+
+msgid "The polling interval and widest route come from the OpenClash tab."
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:184
@@ -289,28 +292,12 @@ msgstr ""
 msgid "no connection to NetEase yet"
 msgstr ""
 
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:71
-msgid "Registering"
-msgstr ""
-
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:72
-msgid "the app cannot find the router yet"
-msgstr ""
-
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:74
 msgid "Not running"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:75
 msgid "Service"
-msgstr ""
-
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:83
-msgid "Registration"
-msgstr ""
-
-#: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:85
-msgid "not registered yet"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/view/uuplugin/uuplugin_status.htm:88
@@ -435,3 +422,14 @@ msgstr ""
 msgid "Collecting data..."
 msgstr ""
 
+msgid "Proxy tabs"
+msgstr ""
+
+msgid "OpenClash, UA3F and HomeProxy each have a tab. Takes effect after Save &amp; Apply."
+msgstr ""
+
+msgid "Only for proxies installed on this router"
+msgstr ""
+
+msgid "Always show all of them"
+msgstr ""

@@ -1,6 +1,13 @@
 local mp, s, o
 require("luci.util")
 require("luci.sys")
+local fs = require "nixio.fs"
+
+-- Same test the init script uses before starting each coexistence daemon.
+local show_all = require("luci.model.uci").cursor():get_first("uuplugin", "uuplugin", "coex_tabs") == "all"
+local has_openclash = show_all or fs.access("/etc/config/openclash")
+local has_ua3f      = show_all or fs.access("/etc/config/ua3f")
+local has_homeproxy = show_all or fs.access("/etc/config/homeproxy")
 
 mp = Map("uuplugin")
 mp.title = translate("UU Game Booster")
@@ -20,9 +27,9 @@ s.addremove = false
 
 s:tab("general", translate("General"))
 s:tab("build",   translate("What to boost"))
-s:tab("clash",   translate("OpenClash"))
-s:tab("ua3f",    translate("UA3F"))
-s:tab("homeproxy", translate("HomeProxy"))
+if has_openclash then s:tab("clash", translate("OpenClash")) end
+if has_ua3f then s:tab("ua3f", translate("UA3F")) end
+if has_homeproxy then s:tab("homeproxy", translate("HomeProxy")) end
 s:tab("devices", translate("Device visibility"))
 s:tab("howto",   translate("How to use"))
 
@@ -43,6 +50,13 @@ o = s:taboption("general", Flag, "addfw",
 		"forward into it. Required on OpenWrt 22.03 and newer, where forwarding " ..
 		"is rejected by default - without it nothing can be boosted."))
 o.default = 1
+
+o = s:taboption("general", ListValue, "coex_tabs", translate("Proxy tabs"),
+	translate("OpenClash, UA3F and HomeProxy each have a tab. Takes effect after " ..
+		"Save &amp; Apply."))
+o:value("auto", translate("Only for proxies installed on this router"))
+o:value("all", translate("Always show all of them"))
+o.default = "auto"
 
 -- ------------------------------------------------------------ plugin build
 
@@ -83,6 +97,7 @@ o:depends("arch", "auto")
 
 -- --------------------------------------------------------------- OpenClash
 
+if has_openclash then
 o = s:taboption("clash", ListValue, "openclash_mode", translate("Coexistence"))
 o:value("cooperative", translate("Split the traffic (recommended)"))
 o:value("bypass", translate("Take whole devices off OpenClash"))
@@ -141,9 +156,11 @@ o = s:taboption("clash", Value, "oc_min_prefix",
 o.datatype = "range(1,32)"
 o.default = "8"
 o:depends("openclash_mode", "cooperative")
+end
 
 -- -------------------------------------------------------------------- UA3F
 
+if has_ua3f then
 o = s:taboption("ua3f", ListValue, "ua3f_mode", translate("Coexistence"))
 o:value("cooperative", translate("Keep game traffic out of UA3F (recommended)"))
 o:value("off", translate("Leave UA3F alone"))
@@ -157,9 +174,11 @@ o.description = translate(
 	"through UA3F." ..
 	"<br /><strong>Leave UA3F alone</strong> changes nothing." ..
 	"<br />Nothing happens unless UA3F is installed and running.")
+end
 
 -- --------------------------------------------------------------- HomeProxy
 
+if has_homeproxy then
 o = s:taboption("homeproxy", ListValue, "homeproxy_mode", translate("Coexistence"))
 o:value("cooperative", translate("Keep game traffic out of HomeProxy (recommended)"))
 o:value("off", translate("Leave HomeProxy alone"))
@@ -175,8 +194,12 @@ o.description = translate(
 	"<br /><strong>Leave HomeProxy alone</strong> changes nothing." ..
 	"<br /><br />HomeProxy's other modes are not handled. There, add the device " ..
 	"under HomeProxy's Access Control, with <em>Proxy all except listed</em>; " ..
-	"it then skips HomeProxy entirely." ..
-	"<br />The polling interval and widest route come from the OpenClash tab.")
+	"it then skips HomeProxy entirely.")
+if has_openclash then
+	o.description = o.description .. "<br />" ..
+		translate("The polling interval and widest route come from the OpenClash tab.")
+end
+end
 
 -- ------------------------------------------------------------ device list
 

@@ -190,23 +190,11 @@ msgstr "正在启动"
 msgid "no connection to NetEase yet"
 msgstr "尚未连接到网易"
 
-msgid "Registering"
-msgstr "正在注册"
-
-msgid "the app cannot find the router yet"
-msgstr "App 暂时还找不到这台路由器"
-
 msgid "Not running"
 msgstr "未运行"
 
 msgid "Service"
 msgstr "服务"
-
-msgid "Registration"
-msgstr "注册状态"
-
-msgid "not registered yet"
-msgstr "尚未注册"
 
 msgid "NetEase link"
 msgstr "网易连接"
@@ -315,5 +303,20 @@ msgstr "已排除 HomeProxy"
 msgid "Only its TUN mode with auto-redirect is handled. See the HomeProxy tab."
 msgstr "只处理它的 TUN + auto-redirect 模式，详见 HomeProxy 标签页。"
 
-msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely.<br />The polling interval and widest route come from the OpenClash tab."
-msgstr "HomeProxy 使用 TUN 入站并开启 auto-redirect 时，会在 UU 路由之前把局域网的 TCP 转给 sing-box，所以被加速设备的游戏连接会失败，而 UDP 仍然正常。<br /><br /><strong>游戏流量不经过 HomeProxy</strong> 放行 UU 导入隧道的游戏服务器地址以及该设备的 DNS，且仅对被加速的设备生效。该设备的其他流量仍然经过 HomeProxy。<br /><strong>不改动 HomeProxy</strong> 则什么都不做。<br /><br />HomeProxy 的其他模式不在处理范围内。这种情况下，请在 HomeProxy 的访问控制里把代理过滤模式设为<em>仅允许列表外</em>，并添加该设备；它会完全不经过 HomeProxy。<br />轮询间隔和最宽路由沿用 OpenClash 标签页的设置。"
+msgid "With its TUN inbound and auto-redirect, HomeProxy redirects LAN TCP to sing-box before UU can route it, so a boosted device's game connections fail while its UDP still works.<br /><br /><strong>Keep game traffic out of HomeProxy</strong> exempts the game servers UU routes into its tunnel, and the device's DNS, only for boosted devices. Everything else from that device still goes through HomeProxy.<br /><strong>Leave HomeProxy alone</strong> changes nothing.<br /><br />HomeProxy's other modes are not handled. There, add the device under HomeProxy's Access Control, with <em>Proxy all except listed</em>; it then skips HomeProxy entirely."
+msgstr "HomeProxy 使用 TUN 入站并开启 auto-redirect 时，会在 UU 路由之前把局域网的 TCP 转给 sing-box，所以被加速设备的游戏连接会失败，而 UDP 仍然正常。<br /><br /><strong>游戏流量不经过 HomeProxy</strong> 放行 UU 导入隧道的游戏服务器地址以及该设备的 DNS，且仅对被加速的设备生效。该设备的其他流量仍然经过 HomeProxy。<br /><strong>不改动 HomeProxy</strong> 则什么都不做。<br /><br />HomeProxy 的其他模式不在处理范围内。这种情况下，请在 HomeProxy 的访问控制里把代理过滤模式设为<em>仅允许列表外</em>，并添加该设备；它会完全不经过 HomeProxy。"
+
+msgid "The polling interval and widest route come from the OpenClash tab."
+msgstr "轮询间隔和最宽路由沿用 OpenClash 标签页的设置。"
+
+msgid "Proxy tabs"
+msgstr "代理标签页"
+
+msgid "OpenClash, UA3F and HomeProxy each have a tab. Takes effect after Save &amp; Apply."
+msgstr "OpenClash、UA3F 和 HomeProxy 各有一个标签页。保存并应用后生效。"
+
+msgid "Only for proxies installed on this router"
+msgstr "仅显示本路由器已安装的代理"
+
+msgid "Always show all of them"
+msgstr "始终全部显示"
