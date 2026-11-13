@@ -131,6 +131,18 @@ function act_status()
 		end
 	end
 
+	-- PassWall is not an engine backend (it works in iptables), but the panel
+	-- shows it alongside them. Its count is boosted devices, not prefixes.
+	if fs.access("/etc/config/passwall") then
+		e.sync[#e.sync + 1] = {
+			id = "passwall",
+			label = "PassWall",
+			running = true,
+			mode = uci:get_first("uuplugin", "uuplugin", "passwall_mode") or "off",
+			exempted = lines("/var/run/uu-passwall.state"),
+		}
+	end
+
 	-- UU creates one TUN per boosted device (tun163, tun164, ...), so list them all
 	local tun = sys.exec("ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d'@' -f1 | grep -E '^tun' | grep -v '^utun' | tr '\\n' ' '")
 	e.tun = tun and tun:gsub("%s+$", "") or ""

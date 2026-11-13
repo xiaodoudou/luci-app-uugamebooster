@@ -92,6 +92,7 @@ FILES = {
     "./usr/libexec/uuplugin/uu-sync.d/nikki.sh":      ("root/usr/libexec/uuplugin/uu-sync.d/nikki.sh", 0o644),
     "./usr/libexec/uuplugin/uu-sync.d/homeproxy.sh":  ("root/usr/libexec/uuplugin/uu-sync.d/homeproxy.sh", 0o644),
     "./usr/libexec/uuplugin/uu-sync.d/ua3f.sh":       ("root/usr/libexec/uuplugin/uu-sync.d/ua3f.sh", 0o644),
+    "./usr/libexec/uuplugin/uu-passwall-sync":      ("root/usr/libexec/uuplugin/uu-passwall-sync", 0o755),
     "./usr/libexec/uuplugin/uu-detect":             ("root/usr/libexec/uuplugin/uu-detect", 0o755),
     "./usr/libexec/uuplugin/uu-route-check":         ("root/usr/libexec/uuplugin/uu-route-check", 0o755),
     "./usr/libexec/uuplugin/uu-view":               ("root/usr/libexec/uuplugin/uu-view", 0o755),

@@ -17,6 +17,10 @@ for _, b in ipairs(ctl.backends()) do
 		proxies[#proxies + 1] = b
 	end
 end
+-- PassWall has no engine descriptor (it works in iptables), but sits here too.
+if show_all or fs.access("/etc/config/passwall") then
+	proxies[#proxies + 1] = { id = "passwall", label = "PassWall", config = "/etc/config/passwall" }
+end
 
 mp = Map("uuplugin")
 mp.title = translate("UU Game Booster")
@@ -150,6 +154,10 @@ local NOTE = {
 	ua3f = translate(
 		"Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only " ..
 		"TCP is exempted, because that is all UA3F touches."),
+	passwall = translate(
+		"Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping " ..
+		"a boosted device on PassWall's resolver can hand the game addresses UU " ..
+		"does not route, so this is off unless PassWall's DNS matters more."),
 }
 
 local has_openclash = false
@@ -157,15 +165,22 @@ for _, b in ipairs(proxies) do
 	if b.id == "openclash" then has_openclash = true end
 
 	o = s:taboption("coexist", ListValue, b.id .. "_mode", b.label)
-	o:value("cooperative", translate("Split the traffic (recommended)"))
-	-- UA3F is not a proxy: it rewrites User-Agents and hands the
-	-- connection back to the router. "Off the proxy" would be the wrong
-	-- words for it, so it gets the two choices that mean something.
-	if b.id ~= "ua3f" then
-		o:value("bypass", translate("Take whole devices off the proxy"))
+	if b.id == "passwall" then
+		-- Not a split: the only thing it changes is where DNS goes.
+		o:value("off", translate("Leave it alone (recommended)"))
+		o:value("cooperative", translate("Keep boosted devices on PassWall's DNS"))
+		o.default = "off"
+	else
+		o:value("cooperative", translate("Split the traffic (recommended)"))
+		-- UA3F is not a proxy: it rewrites User-Agents and hands the
+		-- connection back to the router. "Off the proxy" would be the wrong
+		-- words for it, so it gets the two choices that mean something.
+		if b.id ~= "ua3f" then
+			o:value("bypass", translate("Take whole devices off the proxy"))
+		end
+		o:value("off", translate("Leave it alone"))
+		o.default = "cooperative"
 	end
-	o:value("off", translate("Leave it alone"))
-	o.default = "cooperative"
 	o.description = NOTE[b.id]
 end
 

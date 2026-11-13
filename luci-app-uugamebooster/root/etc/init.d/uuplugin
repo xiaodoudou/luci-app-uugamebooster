@@ -22,6 +22,7 @@ TARBALL="/tmp/uu.tar.gz"
 API="https://router.uu.163.com/api/plugin?type="
 SYNC="/usr/libexec/uuplugin/uu-sync"
 SYNC_DIR="/usr/libexec/uuplugin/uu-sync.d"
+PWSW_SYNC="/usr/libexec/uuplugin/uu-passwall-sync"
 DETECT="/usr/libexec/uuplugin/uu-detect"
 VIEW="/usr/libexec/uuplugin/uu-view"
 XT_DIR="/usr/libexec/uuplugin/xt"
@@ -488,6 +489,25 @@ coex_var() {
 	( . "$SYNC_DIR/$1.sh" >/dev/null 2>&1; eval "printf '%s' \"\$$2\"" )
 }
 
+start_passwall_sync() {
+	local mode
+	mode="$(uci -q get uuplugin.@uuplugin[0].passwall_mode)"
+	[ "$mode" = "cooperative" ] || return 0
+	[ -x "$PWSW_SYNC" ] || return 0
+	if [ ! -f /etc/config/passwall ]; then
+		uu_log "PassWall is not installed; skipping integration."
+		return 0
+	fi
+
+	uu_log "PassWall integration mode: $mode"
+	procd_open_instance uu_passwall_sync
+	procd_set_param command "$PWSW_SYNC" "$mode"
+	procd_set_param respawn
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
 # The config file is the test, not the runtime state: the proxy may start after
 # this service does, and uu-sync waits for its chains instead of giving up.
 coex_installed() {
@@ -710,11 +730,14 @@ start_service() {
 
 	add_firewall_rule
 	start_coexistence
+	start_passwall_sync
 	uu_log "Started. Bind this router in the UU console-booster app to begin."
 }
 
 stop_service() {
 	stop_coexistence
+	# PassWall's DNS exemption is ours, not UU's, so it goes on every stop.
+	[ -x "$PWSW_SYNC" ] && "$PWSW_SYNC" cleanup >/dev/null 2>&1
 	dnat_fallback_cleanup
 
 	# Only tear the firewall zone down when the service is actually being

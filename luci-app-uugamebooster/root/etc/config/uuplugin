@@ -26,6 +26,8 @@ config uuplugin
 	option oc_min_prefix '8'
 	# off | cooperative   (only acts while UA3F is installed and running)
 	option ua3f_mode 'cooperative'
+	# off | cooperative   (only acts while PassWall is installed)
+	option passwall_mode 'off'
 	# off | cooperative | bypass   (only acts while HomeProxy is installed)
 	option homeproxy_mode 'cooperative'
 	# all | blacklist | whitelist
