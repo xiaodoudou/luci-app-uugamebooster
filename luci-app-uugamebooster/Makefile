@@ -16,7 +16,7 @@ LUCI_TITLE:=LuCI support for NetEase UU Game Booster (x86_64 / English / OpenCla
 #   iptables  the OEM build shells out to iptables and ships none, and fw4
 #             images have none, so boosting fails without it. Virtual: a real
 #             package before 22.03, then provided by iptables-nft.
-LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat +ca-bundle +unshare +ip +nftables +iptables
+LUCI_DEPENDS:=+kmod-tun +luci-compat +libstdcpp6 +kmod-ipt-nat +ca-bundle +unshare +ip +nftables +iptables +tcpdump-mini
 # Nothing here is built for the host architecture. The view filters are carried
 # as prebuilt objects for all five, and the right one is chosen at runtime, so
 # the package is genuinely portable.
