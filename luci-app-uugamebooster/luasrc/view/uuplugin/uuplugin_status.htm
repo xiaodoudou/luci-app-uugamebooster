@@ -10,6 +10,7 @@
 	height: .6em;
 	border-radius: 50%;
 	margin-right: .5em;
+	background: rgba(128, 128, 128, .45);
 }
 #uu-status .ok   { background: #3fa14a; }
 #uu-status .bad  { background: #e05252; }
@@ -17,6 +18,18 @@
 #uu-status .t-ok   { color: #3fa14a; font-weight: 600; }
 #uu-status .t-bad  { color: #e05252; font-weight: 600; }
 #uu-status .t-warn { color: #e0912f; font-weight: 600; }
+
+/* One pill per proxy. Borders derive from currentColor so the row reads the
+   same on a light and a dark theme without knowing which one is in use. */
+#uu-status .uu-chip {
+	display: inline-block;
+	padding: .12em .55em;
+	margin: .15em .35em .15em 0;
+	border: 1px solid rgba(128, 128, 128, .35);
+	border-radius: 1em;
+	line-height: 1.7;
+	white-space: nowrap;
+}
 
 #uu-status .uu-muted { opacity: .6; }
 #uu-status .uu-num { font-weight: 600; }
@@ -57,7 +70,12 @@ function uuRender(d) {
 		var el = document.getElementById('uu-status');
 		if (!d || !el) return;
 
-		var h = '';
+		// Rows are collected first and rendered last, so whichever one comes out
+		// last gets the cbi-value-last class regardless of which proxies are
+		// installed. The panel used to spell that out by hand for every
+		// combination, and adding a proxy meant editing all of them again.
+		var rows = [], alerts = '';
+		function row(k, v) { rows.push([k, v]); }
 
 		// "Running" alone is misleading: after every start the plugin has to
 		// reach NetEase before the phone app can find the router.
@@ -69,24 +87,24 @@ function uuRender(d) {
 			      ' <span class="uu-muted">&ndash; <%:no connection to NetEase yet%></span>';
 		else
 			svc = '<span class="uu-dot bad"></span><span class="t-bad"><%:Not running%></span>';
-		h += uuRow('<%:Service%>', svc);
+		row('<%:Service%>', svc);
 
 		// The control server address says which NetEase endpoint the tunnel is
 		// talking to, and it changes between sessions.
 		if (d.running) {
-			h += uuRow('<%:NetEase link%>', d.cloud
+			row('<%:NetEase link%>', d.cloud
 				? '<span class="uu-dot ok"></span><code>' + d.cloud + '</code>'
 				: '<span class="uu-muted"><%:connecting%>&hellip;</span>');
 		}
 
 		if (d.no_bootstart) {
-			h += '<div class="uu-alert"><span class="t-bad"><%:Will not start after a reboot%></span><br />' +
+			alerts += '<div class="uu-alert"><span class="t-bad"><%:Will not start after a reboot%></span><br />' +
 			     '<%:Boot start is off although the service is enabled. Save & Apply, or run%> ' +
 			     '<code>/etc/init.d/uuplugin enable</code><%:, to turn it back on.%></div>';
 		}
 
 		if (d.foreign) {
-			h += '<div class="uu-alert"><span class="t-bad"><%:Conflicting UU installation%></span><br />' +
+			alerts += '<div class="uu-alert"><span class="t-bad"><%:Conflicting UU installation%></span><br />' +
 			     '<code>' + d.foreign + '</code><br />' +
 			     '<%:It owns the PID file, so this service cannot start. Run%> ' +
 			     '<code>/etc/init.d/uuplugin takeover</code> <%:to hand over.%></div>';
@@ -97,74 +115,70 @@ function uuRender(d) {
 			'oem-emulated': '<%:vendor build, emulated - consoles, PCs and phones%>',
 			'generic':      '<%:standard build - game consoles only%>'
 		}[d.build] || '';
-		h += uuRow('<%:Running%>', '<code>' + (d.arch || '?') + '</code>' +
+		row('<%:Running%>', '<code>' + (d.arch || '?') + '</code>' +
 			(buildText ? ' <span class="uu-muted">' + buildText + '</span>' : '') +
 			(d.dnat_fallback ? '<br /><span class="uu-muted"><%:iptables here has no DNAT target; nftables handles the UU DNS redirect instead.%></span>' : ''));
 
-		h += uuRow('<%:Tunnel%>', d.tun
+		row('<%:Tunnel%>', d.tun
 			? '<code>' + d.tun + '</code>'
 			: '<span class="uu-muted"><%:none yet%></span>');
 
-		h += uuRow('<%:Boosted devices%>', d.boosted
+		row('<%:Boosted devices%>', d.boosted
 			? '<span class="uu-dot ok"></span><code>' +
 			  d.boosted.replace(/ /g, '</code> <code>') + '</code>'
 			: '<span class="uu-muted"><%:none - boost a device in the UU app%></span>');
 
-		// UA3F and HomeProxy rows only appear when installed, so whichever
-		// block comes last closes the panel.
-		var ua3f = d.ua3f_installed;
-		var hp = d.homeproxy_installed;
-		if (!d.openclash_installed) {
-			h += uuRow('<%:OpenClash%>', '<span class="uu-muted"><%:not installed%></span>', !ua3f && !hp);
-		} else {
-			h += uuRow('<%:OpenClash%>', d.openclash_running
-				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
-				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>');
+		// One line for all of them. A row per proxy plus a row per exemption
+		// pushed everything else off the panel once four were installed, and
+		// the only things worth scanning are "is it on" and "how many
+		// destinations are currently kept out of it".
+		if (d.sync && d.sync.length) {
+			var chips = [];
+			d.sync.forEach(function(s) {
+				if (s.mode == 'off') {
+					chips.push('<span class="uu-chip">' +
+						'<span class="uu-dot"></span>' +
+						'<span class="uu-muted">' + s.label +
+						' <%:left alone%></span></span>');
+					return;
+				}
 
-			var coop = (d.mode == 'cooperative');
-			h += uuRow('<%:Coexistence%>', '<code>' + (d.mode || '?') + '</code>', !coop && !ua3f && !hp);
+				if (!s.running) {
+					chips.push('<span class="uu-chip">' +
+						'<span class="uu-dot warn"></span>' +
+						'<span class="t-warn">' + s.label + '</span> ' +
+						'<span class="uu-muted"><%:not running%></span></span>');
+					return;
+				}
 
-			if (coop) {
-				h += uuRow('<%:Exempted from proxy%>', (d.bypassed > 0)
-					? '<span class="uu-num">' + d.bypassed + '</span> <%:game destinations, for boosted devices only%>'
-					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', !ua3f && !hp);
-			}
+				// The count means different things per mode: destinations kept
+				// out of a split, or devices taken off the proxy entirely.
+				var chip = '<span class="uu-chip">' +
+					'<span class="uu-dot ok"></span>' +
+					'<span class="t-ok">' + s.label + '</span>' +
+					((s.exempted > 0)
+						? ' <span class="uu-num">' + s.exempted + '</span>' +
+						  ' <span class="uu-muted">' +
+						  ((s.mode == 'bypass')
+							? '<%:devices excluded%>'
+							: '<%:exempted%>') +
+						  '</span>'
+						: ' <span class="uu-muted"><%:nothing to exempt%></span>');
+
+				// A proxy installed in a mode this cannot reach: worth a mark,
+				// not a whole row.
+				if (s.note == 'tun-only')
+					chip += ' <span class="t-warn" title="<%:Only its TUN mode with auto-redirect is handled.%>">!</span>';
+
+				chips.push(chip + '</span>');
+			});
+			row('<%:Coexistence%>', chips.join(' '));
 		}
 
-		if (ua3f) {
-			var ucoop = (d.ua3f_mode == 'cooperative') && d.ua3f_running;
-			h += uuRow('<%:UA3F%>', (d.ua3f_running
-				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
-				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>') +
-				(d.ua3f_mode == 'off' ? ' <span class="uu-muted">&ndash; <%:left alone%></span>' : ''),
-				!ucoop && !hp);
-
-			if (ucoop) {
-				h += uuRow('<%:Exempted from UA3F%>', (d.ua3f_exempted > 0)
-					? '<span class="uu-num">' + d.ua3f_exempted + '</span> <%:game destinations, for boosted devices only%>'
-					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', !hp);
-			}
-		}
-
-		if (hp) {
-			var hpoff = (d.homeproxy_mode == 'off');
-			var hpcoop = !hpoff && d.homeproxy_tun;
-			h += uuRow('<%:HomeProxy%>', (d.homeproxy_running
-				? '<span class="uu-dot ok"></span><span class="t-ok"><%:Running%></span>'
-				: '<span class="uu-dot warn"></span><span class="t-warn"><%:installed, not running%></span>') +
-				(hpoff ? ' <span class="uu-muted">&ndash; <%:left alone%></span>'
-				: (d.homeproxy_running && !d.homeproxy_tun)
-				? '<br /><span class="uu-muted"><%:Only its TUN mode with auto-redirect is handled. See the HomeProxy tab.%></span>' : ''),
-				!hpcoop);
-
-			if (hpcoop) {
-				h += uuRow('<%:Exempted from HomeProxy%>', (d.homeproxy_exempted > 0)
-					? '<span class="uu-num">' + d.homeproxy_exempted + '</span> <%:game destinations, for boosted devices only%>'
-					: '<span class="uu-muted"><%:nothing - no device is being boosted%></span>', true);
-			}
-		}
-
-		el.innerHTML = h;
+		var h = '';
+		for (var i = 0; i < rows.length; i++)
+			h += uuRow(rows[i][0], rows[i][1], i == rows.length - 1);
+		el.innerHTML = h + alerts;
 }
 
 // Deliberately not XHR.poll(). Two reasons, both things that went wrong with it:

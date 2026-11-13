@@ -9,16 +9,16 @@ The UU **PC** client sidesteps the problem by hooking individual game *processes
 | Mode | What happens |
 |---|---|
 | **Split the traffic** (default) | Game traffic takes the UU tunnel. **Everything else from the same device still goes through OpenClash.** Nothing gets excluded wholesale. |
-| **Take whole devices off OpenClash** | The fallback. Whatever you list stops using the proxy entirely (`lan_ac_mode=0` blacklist) for as long as UU runs. |
+| **Take whole devices off OpenClash** | The fallback. A boosted device returns from OpenClash's chain before anything else looks at it, so it skips the proxy entirely. |
 | **Leave OpenClash alone** | Nothing gets touched. |
 
-Splitting is re-applied on every poll, so it heals itself when OpenClash restarts and rebuilds its chains. Everything is undone when UU stops.
+Splitting is re-applied on every poll, so it heals itself when OpenClash restarts and rebuilds its chains. Everything is undone when UU stops. Whole-device bypass is the same machinery with the destination condition dropped — one `return` rule at the top of the chain, not an edit to OpenClash's access-control lists. (`lan_ac_black_ips` is still read, and can still be tidied up, but nothing writes it any more.)
 
 ## What actually leaves OpenClash
 
 The obvious approach doesn't work. OpenClash's `wan_ac_black_ips` is destination-only and global, so copying UU's route list into it would take *every* device on your LAN off the proxy for those destinations. Not what anyone wants.
 
-Instead `uu-openclash-sync` owns two nftables sets of its own and inserts `return` rules at the top of OpenClash's chain. Three exemptions, all limited to boosted devices, and all read back from UU's live rules rather than assumed:
+Instead the shared engine, described by `uu-sync.d/openclash.sh`, owns two nftables sets of its own and inserts `return` rules at the top of OpenClash's chain. Three exemptions, all limited to boosted devices, and all read back from UU's live rules rather than assumed:
 
 | Exemption | Where it comes from |
 |---|---|

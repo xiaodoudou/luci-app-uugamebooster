@@ -72,7 +72,10 @@ When HomeProxy is installed, the status panel shows whether it is running and, i
 | Mode | What happens |
 |---|---|
 | **Keep game traffic out of HomeProxy** (default) | Game destinations and DNS take the UU tunnel. Everything else from that device keeps using HomeProxy. |
+| **Take whole devices off HomeProxy** | The boosted device gets one `return` at the top of the chain: it skips sing-box entirely, whatever it is talking to. |
 | **Leave HomeProxy alone** | Nothing gets touched. |
+
+Both modes are nftables rules in sing-box's own table, so neither edits HomeProxy's configuration nor restarts it. In TUN mode that is all it takes; in the modes below there is no chain to reach, which is what the status page is warning about.
 
 ## Other HomeProxy modes
 

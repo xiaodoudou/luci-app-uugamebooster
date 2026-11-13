@@ -129,7 +129,7 @@ snapshot() {
 		printf '[UU route tables]\n'
 		ip -4 route show table all 2>/dev/null | grep -E ' dev tun' | head -300
 		printf '[nft rules and counters]\n'
-		nft -a list ruleset 2>/dev/null | grep -E 'uu-coop|uu_boosted|uu_dev_dests|openclash|XU_ACC_DEVICE|tun16|mark set|MARK' | head -300
+		nft -a list ruleset 2>/dev/null | grep -E 'uu-sync-|uu_boosted|uu_dev_dests|openclash|XU_ACC_DEVICE|tun16|mark set|MARK' | head -300
 		printf '[nft sets]\n'
 		for s in uu_boosted uu_dev_dests; do
 			printf 'set=%s\n' "$s"
@@ -153,7 +153,7 @@ snapshot() {
 	if [ -n "$DEST" ]; then
 		grep -E '^(client=|.*route|.*src |.*dev )' "$SNAPSHOT" | head -30
 	fi
-	grep -E 'uu-coop|openclash' "$SNAPSHOT" | head -20
+	grep -E 'uu-sync-|openclash' "$SNAPSHOT" | head -20
 }
 
 cleanup() {

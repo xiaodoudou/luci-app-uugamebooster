@@ -2,7 +2,7 @@
 
 # luci-app-uugamebooster
 
-> OpenWrt LuCI - NetEase UU Game Booster, with PC and phone boosting and OpenClash coexistence
+> OpenWrt LuCI - NetEase UU Game Booster, with PC and phone boosting and coexistence with OpenClash, nikki, UA3F and HomeProxy
 
 [![GitHub Release](https://img.shields.io/github/v/release/xiaodoudou/luci-app-uugamebooster?style=flat-square&color=e94560)](https://github.com/xiaodoudou/luci-app-uugamebooster/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/xiaodoudou/luci-app-uugamebooster/build.yml?branch=master&style=flat-square&label=build)](https://github.com/xiaodoudou/luci-app-uugamebooster/actions/workflows/build.yml)
@@ -24,9 +24,7 @@ What this fork adds:
 
 - **Native x86_64**, plus big-endian MIPS. Upstream supports neither.
 - **PC and phone boosting**, not just consoles. Runs natively on ARM routers, emulated on x86_64.
-- **Coexistence with OpenClash.** The two split the traffic instead of one of them quietly winning.
-- **Coexistence with UA3F.** Game traffic skips its User-Agent rewriting, everything else still goes through it.
-- **Coexistence with HomeProxy** in TUN mode. Game traffic and DNS skip sing-box's redirect, everything else stays on the proxy.
+- **Coexistence with OpenClash, nikki, UA3F and HomeProxy**, from one engine: a proxy is a descriptor file, not another copy of the same daemon. See [Coexistence](docs/coexistence.md).
 - **As fast as UU's own PC client**, measured: 25 ms vs 25-27 ms on CS2 through Hong Kong.
 - **A device list**, so the UU app only sees the devices you pick.
 - **English and Chinese UI**, following LuCI's language setting.
@@ -37,7 +35,7 @@ The plugin ships **no accelerator binary**. On first start it downloads the offi
 
 ## Requirements
 
-OpenWrt 19.07 or newer, 22.03+ recommended. The OpenClash split needs nftables, so in practice 22.03+.
+OpenWrt 19.07 or newer, 22.03+ recommended. The proxy splits need nftables, so in practice 22.03+.
 
 Everything else the package pulls in itself: `kmod-tun`, `luci-compat`, `libstdcpp6`, `kmod-ipt-nat`, `ca-bundle`, `unshare`, `ip`, `nftables` and `iptables` (the vendor build needs it to boost, and on 22.03+ it resolves to `iptables-nft`). There is nothing to install by hand. Some vendor firmware builds iptables without its DNAT target (photonicatWrt is one), and the vendor build gives up every boost without it, so the plugin detects that and does those rules in nftables instead. See [Firewall](docs/firewall.md#firmware-whose-iptables-has-no-dnat).
 
@@ -97,7 +95,7 @@ make defconfig && make package/luci-app-uugamebooster/compile V=s
 3. Wait for the status panel to say **Ready**. Before that the app can't find your router, even though the service is already running.
 4. Follow the **How to use** tab: install the app, bind the router, pick a device
 
-Settings are split across seven tabs (General, What to boost, OpenClash, UA3F, HomeProxy, Device visibility, How to use). The panel above them shows how far along the service is, which build is running, the tunnel devices, and what's being boosted.
+Settings are split across five tabs (General, What to boost, Coexistence, Device visibility, How to use). The Coexistence tab grows a row for each proxy it finds installed — OpenClash, nikki, UA3F, HomeProxy — and the status panel shows one line per proxy with its active exemption count. The panel above them shows how far along the service is, which build is running and what's being boosted.
 
 ### Language
 
@@ -121,8 +119,10 @@ Each of these got its own page, because each one turned out to need it:
 |---|---|
 | [Which build runs](docs/builds.md) | Why x86_64 works at all, why PC and phone boosting needs a vendor build, and how the plugin picks between running one natively and emulating it |
 | [Device visibility](docs/device-list.md) | Keeping the UU app from listing every host you own, and why the ARP table can't be filtered the obvious way |
+| [Coexistence](docs/coexistence.md) | The one engine behind every proxy adapter: why three near-identical daemons became one, and what a backend has to answer |
 | [Running alongside OpenClash](docs/openclash.md) | What actually leaves the proxy for a boosted device, measured rather than guessed |
-| [Running alongside UA3F](docs/ua3f.md) | Keeping game connections out of UA3F's User-Agent rewriting, without taking the rest of the device with them |
+| [Running alongside nikki](docs/nikki.md) | mihomo's chains, the two settings that silently break coexistence, and why fake-ip can't work with UU |
+| [Running alongside UA3F](docs/ua3f.md) | Keeping game connections out of UA3F's User-Agent rewriting — and the hook priority that decides whether UA3F does anything at all |
 | [Running alongside HomeProxy](docs/homeproxy.md) | Why only TCP breaks under sing-box, and how the redirect is routed around without dropping the device off the proxy |
 | [Firewall](docs/firewall.md) | The `tun16+` zone, and why it survives a restart |
 | [Conflicts with an existing UU install](docs/existing-install.md) | Taking over from NetEase's own installer script |

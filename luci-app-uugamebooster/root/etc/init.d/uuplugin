@@ -20,9 +20,8 @@ PROG="$RUN_DIR/uuplugin"
 UU_CONF="$RUN_DIR/uu.conf"
 TARBALL="/tmp/uu.tar.gz"
 API="https://router.uu.163.com/api/plugin?type="
-SYNC="/usr/libexec/uuplugin/uu-openclash-sync"
-UA3F_SYNC="/usr/libexec/uuplugin/uu-ua3f-sync"
-HP_SYNC="/usr/libexec/uuplugin/uu-homeproxy-sync"
+SYNC="/usr/libexec/uuplugin/uu-sync"
+SYNC_DIR="/usr/libexec/uuplugin/uu-sync.d"
 DETECT="/usr/libexec/uuplugin/uu-detect"
 VIEW="/usr/libexec/uuplugin/uu-view"
 XT_DIR="/usr/libexec/uuplugin/xt"
@@ -466,64 +465,62 @@ dnat_fallback_cleanup() {
 
 # ---------------------------------------------------------------- service
 
-start_openclash_sync() {
-	local mode
-	mode="$(uci -q get uuplugin.@uuplugin[0].openclash_mode)"
-	[ -z "$mode" ] && mode="cooperative"
-	[ "$mode" = "off" ] && return 0
-	[ -x "$SYNC" ] || return 0
-	if [ ! -f /etc/config/openclash ]; then
-		uu_log "OpenClash is not installed; skipping integration."
-		return 0
-	fi
+# ------------------------------------------------------------ coexistence
+#
+# Every proxy this plugin can share the LAN with is one descriptor file in
+# uu-sync.d/: which nftables table and chains it uses, and what an exempted
+# packet looks like. The engine (uu-sync) is the same program for all of them,
+# and this block is the same for all of them, so a new proxy costs one file plus
+# its row in the LuCI form - not another daemon and another copy of this
+# service.
 
-	uu_log "OpenClash integration mode: $mode"
-	procd_open_instance uu_openclash_sync
-	procd_set_param command "$SYNC" "$mode"
-	procd_set_param respawn
-	procd_set_param stdout 1
-	procd_set_param stderr 1
-	procd_close_instance
+coex_backends() {
+	local f
+	for f in "$SYNC_DIR"/*.sh; do
+		[ -f "$f" ] || continue
+		basename "$f" .sh
+	done
 }
 
-start_ua3f_sync() {
-	local mode
-	mode="$(uci -q get uuplugin.@uuplugin[0].ua3f_mode)"
-	[ -z "$mode" ] && mode="cooperative"
-	[ "$mode" = "off" ] && return 0
-	[ -x "$UA3F_SYNC" ] || return 0
-	[ -f /etc/config/ua3f ] || return 0
-
-	uu_log "UA3F integration mode: $mode"
-	procd_open_instance uu_ua3f_sync
-	procd_set_param command "$UA3F_SYNC" "$mode"
-	procd_set_param respawn
-	procd_set_param stdout 1
-	procd_set_param stderr 1
-	procd_close_instance
+# One descriptor variable, read in a subshell so the descriptor's functions do
+# not leak into this script.
+coex_var() {
+	( . "$SYNC_DIR/$1.sh" >/dev/null 2>&1; eval "printf '%s' \"\$$2\"" )
 }
 
-start_homeproxy_sync() {
-	local mode
-	mode="$(uci -q get uuplugin.@uuplugin[0].homeproxy_mode)"
-	[ -z "$mode" ] && mode="cooperative"
-	[ "$mode" = "off" ] && return 0
-	[ -x "$HP_SYNC" ] || return 0
-	# The config file is the test, not the nftables table: HomeProxy may start
-	# after this service does, and the sync waits for its table instead of
-	# giving up on the first pass.
-	if [ ! -f /etc/config/homeproxy ]; then
-		uu_log "HomeProxy is not installed; skipping integration."
-		return 0
-	fi
+# The config file is the test, not the runtime state: the proxy may start after
+# this service does, and uu-sync waits for its chains instead of giving up.
+coex_installed() {
+	[ -f "$(coex_var "$1" CONFIG)" ]
+}
 
-	uu_log "HomeProxy integration mode: $mode"
-	procd_open_instance uu_homeproxy_sync
-	procd_set_param command "$HP_SYNC" "$mode"
-	procd_set_param respawn
-	procd_set_param stdout 1
-	procd_set_param stderr 1
-	procd_close_instance
+coex_label() {
+	coex_var "$1" LABEL
+}
+
+start_coexistence() {
+	local b mode
+	for b in $(coex_backends); do
+		coex_installed "$b" || continue
+		mode="$(uci -q get "uuplugin.@uuplugin[0].${b}_mode")"
+		[ -z "$mode" ] && mode="cooperative"
+		[ "$mode" = "off" ] && continue
+
+		uu_log "$(coex_label "$b") integration: $mode"
+		procd_open_instance "uu_sync_$b"
+		procd_set_param command "$SYNC" "$b" "$mode"
+		procd_set_param respawn
+		procd_set_param stdout 1
+		procd_set_param stderr 1
+		procd_close_instance
+	done
+}
+
+stop_coexistence() {
+	local b
+	for b in $(coex_backends); do
+		[ -x "$SYNC" ] && "$SYNC" "$b" cleanup >/dev/null 2>&1
+	done
 }
 
 start_service() {
@@ -712,16 +709,12 @@ start_service() {
 	fi
 
 	add_firewall_rule
-	start_openclash_sync
-	start_ua3f_sync
-	start_homeproxy_sync
+	start_coexistence
 	uu_log "Started. Bind this router in the UU console-booster app to begin."
 }
 
 stop_service() {
-	[ -x "$SYNC" ] && "$SYNC" cleanup >/dev/null 2>&1
-	[ -x "$UA3F_SYNC" ] && "$UA3F_SYNC" cleanup >/dev/null 2>&1
-	[ -x "$HP_SYNC" ] && "$HP_SYNC" cleanup >/dev/null 2>&1
+	stop_coexistence
 	dnat_fallback_cleanup
 
 	# Only tear the firewall zone down when the service is actually being

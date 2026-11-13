@@ -1,0 +1,10 @@
+# Everything in this repo is shell, Lua or Markdown that runs on the router.
+# A CRLF checkout turns every script into a syntax error there:
+#   syntax error: unexpected word (expecting "do")
+# which is a miserable thing to debug from a browser. Pin it here.
+* text=auto eol=lf
+
+*.ipk binary
+*.apk binary
+*.gz binary
+*.png binary

@@ -10,6 +10,46 @@ function index()
 	entry({"admin", "services", "uuplugin", "status"}, call("act_status")).leaf = true
 end
 
+-- The proxies this plugin can share the LAN with, read from the descriptors in
+-- uu-sync.d/ rather than kept as a list here. One file per proxy is the whole
+-- contract: the engine (uu-sync) runs it, the service starts it, and both this
+-- controller and the CBI form ask this function rather than keeping a second
+-- copy of the list that could drift from the scripts.
+function backends()
+	local fs = require "nixio.fs"
+	local list = {}
+	local d = "/usr/libexec/uuplugin/uu-sync.d"
+
+	local p = io.popen("ls " .. d .. "/*.sh 2>/dev/null")
+	if p then
+		for path in p:read("*a"):gmatch("%S+") do
+			local id = path:match("([^/]+)%.sh$")
+			local body = fs.readfile(path) or ""
+			if id then
+				list[#list + 1] = {
+					id = id,
+					label = body:match("\nLABEL=\"([^\"]+)\"")
+						or body:match("\nLABEL=([^\r\n]+)")
+						or id,
+					config = body:match("\nCONFIG=([^\r\n]+)") or "",
+				}
+			end
+		end
+		p:close()
+	end
+
+	-- ls sorts alphabetically, which puts HomeProxy above the two proxies most
+	-- people actually run. Order the known ones the way the docs do, and leave
+	-- anything new at the end in the order it was found.
+	local rank = { openclash = 1, nikki = 2, homeproxy = 3, ua3f = 4 }
+	for i, b in ipairs(list) do
+		b._rank = rank[b.id] or (100 + i)
+	end
+	table.sort(list, function(a, b) return a._rank < b._rank end)
+
+	return list
+end
+
 function act_status()
 	local sys = require "luci.sys"
 	local fs  = require "nixio.fs"
@@ -36,9 +76,6 @@ function act_status()
 	-- is being done in nftables instead
 	e.dnat_fallback = det:match("dnat=nft") ~= nil
 
-	-- OpenClash integration state
-	e.openclash_installed = fs.access("/etc/config/openclash")
-	e.openclash_running = det:match("openclash=(%d+)") ~= nil
 	e.boosted = det:match("boosted=([^\r\n]*)")
 	if e.boosted == "" then e.boosted = nil end
 
@@ -56,7 +93,6 @@ function act_status()
 	else
 		e.phase = "ready"
 	end
-	e.mode = uci:get_first("uuplugin", "uuplugin", "openclash_mode") or "cooperative"
 
 	-- Switched on, but without its boot link it would not come back after a
 	-- reboot. The next start or reload repairs it; until then, say so.
@@ -71,21 +107,29 @@ function act_status()
 		return n
 	end
 
-	-- Number of destination prefixes currently diverted away from OpenClash
-	e.bypassed = lines("/var/run/uu-openclash.state")
-
-	-- UA3F integration state, and the prefixes kept out of it
-	e.ua3f_installed = fs.access("/etc/config/ua3f")
-	e.ua3f_running = det:match("ua3f=1") ~= nil
-	e.ua3f_mode = uci:get_first("uuplugin", "uuplugin", "ua3f_mode") or "cooperative"
-	e.ua3f_exempted = lines("/var/run/uu-ua3f.state")
-
-	-- HomeProxy integration state, same terms as UA3F's
-	e.homeproxy_installed = fs.access("/etc/config/homeproxy")
-	e.homeproxy_running = det:match("homeproxy=%S") ~= nil
-	e.homeproxy_tun = det:match("homeproxy=tun") ~= nil
-	e.homeproxy_mode = uci:get_first("uuplugin", "uuplugin", "homeproxy_mode") or "cooperative"
-	e.homeproxy_exempted = lines("/var/run/uu-homeproxy.state")
+	-- One entry per installed proxy. "running" here means intercepting, as
+	-- reported from the live system: a proxy can be installed and stopped, and
+	-- then there is nothing to exempt.
+	e.sync = {}
+	for _, b in ipairs(backends()) do
+		if b.config ~= "" and fs.access(b.config) then
+			local state = det:match("\n" .. b.id .. "=(%S*)") or ""
+			local entry = {
+				id = b.id,
+				label = b.label,
+				running = (state ~= "" and state ~= "0"),
+				mode = uci:get_first("uuplugin", "uuplugin", b.id .. "_mode")
+					or "cooperative",
+				exempted = lines("/var/run/uu-" .. b.id .. ".state"),
+			}
+			-- HomeProxy's only handled mode is sing-box's TUN inbound; its
+			-- other modes hook fw4 and this exemption cannot reach them.
+			if b.id == "homeproxy" and entry.running and state ~= "tun" then
+				entry.note = "tun-only"
+			end
+			e.sync[#e.sync + 1] = entry
+		end
+	end
 
 	-- UU creates one TUN per boosted device (tun163, tun164, ...), so list them all
 	local tun = sys.exec("ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | cut -d'@' -f1 | grep -E '^tun' | grep -v '^utun' | tr '\\n' ' '")

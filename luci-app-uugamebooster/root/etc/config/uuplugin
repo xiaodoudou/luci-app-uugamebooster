@@ -11,14 +11,22 @@ config uuplugin
 	# x86_64 | aarch64 | arm | mipsel | mipseb
 	option arch_force ''
 	# off | cooperative | bypass
+	# One option per proxy in /usr/libexec/uuplugin/uu-sync.d/, named
+	# <backend>_mode. Only the ones whose config file exists are started.
+	# cooperative exempts a boosted device's traffic to UU's own destinations;
+	# bypass takes the device off the proxy entirely. Both are nftables rules in
+	# the proxy's own chains, so neither writes the proxy's config or restarts
+	# it. UA3F has no bypass: it is a User-Agent rewriter, not a proxy.
 	option openclash_mode 'cooperative'
+	# off | cooperative | bypass
+	option nikki_mode 'cooperative'
 	# Shared by every coexistence daemon: how often to re-check UU's routes,
 	# and the widest route that may be exempted.
 	option oc_interval '5'
 	option oc_min_prefix '8'
 	# off | cooperative   (only acts while UA3F is installed and running)
 	option ua3f_mode 'cooperative'
-	# off | cooperative   (only acts while HomeProxy is installed and running)
+	# off | cooperative | bypass   (only acts while HomeProxy is installed)
 	option homeproxy_mode 'cooperative'
 	# all | blacklist | whitelist
 	option device_mode 'all'
