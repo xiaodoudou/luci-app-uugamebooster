@@ -89,6 +89,7 @@ FILES = {
     # One descriptor per proxy: the engine reads them, and so does the LuCI form,
     # so they have to ship as data rather than be compiled into uu-sync.
     "./usr/libexec/uuplugin/uu-sync.d/openclash.sh":  ("root/usr/libexec/uuplugin/uu-sync.d/openclash.sh", 0o644),
+    "./usr/libexec/uuplugin/uu-sync.d/ssrplus.sh":    ("root/usr/libexec/uuplugin/uu-sync.d/ssrplus.sh", 0o644),
     "./usr/libexec/uuplugin/uu-sync.d/nikki.sh":      ("root/usr/libexec/uuplugin/uu-sync.d/nikki.sh", 0o644),
     "./usr/libexec/uuplugin/uu-sync.d/homeproxy.sh":  ("root/usr/libexec/uuplugin/uu-sync.d/homeproxy.sh", 0o644),
     "./usr/libexec/uuplugin/uu-sync.d/ua3f.sh":       ("root/usr/libexec/uuplugin/uu-sync.d/ua3f.sh", 0o644),

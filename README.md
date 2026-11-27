@@ -25,6 +25,7 @@ What this fork adds:
 - **Native x86_64**, plus big-endian MIPS. Upstream supports neither.
 - **PC and phone boosting**, not just consoles. Runs natively on ARM routers, emulated on x86_64.
 - **Coexistence with OpenClash, nikki, UA3F and HomeProxy**, from one engine: a proxy is a descriptor file, not another copy of the same daemon. See [Coexistence](docs/coexistence.md).
+- **Coexistence with SSR+ on nftables**. UU-routed IPv4 traffic skips SSR+'s redirects and UDP drops in the default split mode. See [SSR+](docs/ssrplus.md).
 - **Coexistence with PassWall**, off by default. Game traffic already routes into UU's tunnel on its own; what collides is DNS, and switching this on keeps a boosted device resolving through PassWall, at the cost of game names that may resolve outside UU's routes. See [docs/passwall.md](docs/passwall.md).
 - **As fast as UU's own PC client**, measured: 25 ms vs 25-27 ms on CS2 through Hong Kong.
 - **A device list**, so the UU app only sees the devices you pick.
@@ -96,7 +97,7 @@ make defconfig && make package/luci-app-uugamebooster/compile V=s
 3. Wait for the status panel to say **Ready**. Before that the app can't find your router, even though the service is already running.
 4. Follow the **How to use** tab: install the app, bind the router, pick a device
 
-Settings are split across five tabs (General, What to boost, Coexistence, Device visibility, How to use). The Coexistence tab grows a row for each proxy it finds installed — OpenClash, nikki, UA3F, HomeProxy — and the status panel shows one line per proxy with its active exemption count. The panel above them shows how far along the service is, which build is running and what's being boosted.
+Settings are split across five tabs (General, What to boost, Coexistence, Device visibility, How to use). The Coexistence tab grows a row for each proxy it finds installed, and the status panel shows one line per proxy with its active exemption count. The panel above them shows how far along the service is, which build is running and what's being boosted.
 
 ### Language
 
@@ -122,6 +123,7 @@ Each of these got its own page, because each one turned out to need it:
 | [Device visibility](docs/device-list.md) | Keeping the UU app from listing every host you own, and why the ARP table can't be filtered the obvious way |
 | [Coexistence](docs/coexistence.md) | The one engine behind every proxy adapter: why three near-identical daemons became one, and what a backend has to answer |
 | [Running alongside OpenClash](docs/openclash.md) | What actually leaves the proxy for a boosted device, measured rather than guessed |
+| [Running alongside SSR+](docs/ssrplus.md) | IPv4 TCP and UDP coexistence with the nftables backend |
 | [Running alongside nikki](docs/nikki.md) | mihomo's chains, the two settings that silently break coexistence, and why fake-ip can't work with UU |
 | [Running alongside UA3F](docs/ua3f.md) | Keeping game connections out of UA3F's User-Agent rewriting — and the hook priority that decides whether UA3F does anything at all |
 | [Running alongside HomeProxy](docs/homeproxy.md) | Why only TCP breaks under sing-box, and how the redirect is routed around without dropping the device off the proxy |

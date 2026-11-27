@@ -136,6 +136,10 @@ msgid "Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only T
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:157
+msgid "Intercepts LAN traffic in its own nftables chains. In split mode, UU's live routes determine which IPv4 traffic bypasses SSR+."
+msgstr ""
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:157
 msgid "Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping a boosted device on PassWall's resolver can hand the game addresses UU does not route, so this is off unless PassWall's DNS matters more."
 msgstr ""
 
@@ -180,7 +184,7 @@ msgid "Widest route to divert"
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:213
-msgid "A safety limit, as a prefix length: a route broader than this is never sent around the proxy. Stops one stray default route from pulling the whole internet out of it."
+msgid "The minimum prefix length for proxies using destination sets. SSR+ uses a live route lookup instead."
 msgstr ""
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:223

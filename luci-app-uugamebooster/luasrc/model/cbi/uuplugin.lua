@@ -154,6 +154,9 @@ local NOTE = {
 	ua3f = translate(
 		"Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only " ..
 		"TCP is exempted, because that is all UA3F touches."),
+	ssrplus = translate(
+		"Intercepts LAN traffic in its own nftables chains. In split mode, UU's " ..
+		"live routes determine which IPv4 traffic bypasses SSR+."),
 	passwall = translate(
 		"Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping " ..
 		"a boosted device on PassWall's resolver can hand the game addresses UU " ..
@@ -210,9 +213,8 @@ o.default = "5"
 
 o = s:taboption("coexist", Value, "oc_min_prefix",
 	translate("Widest route to divert"),
-	translate("A safety limit, as a prefix length: a route broader than this is " ..
-		"never sent around the proxy. Stops one stray default route from " ..
-		"pulling the whole internet out of it."))
+	translate("The minimum prefix length for proxies using destination sets. " ..
+		"SSR+ uses a live route lookup instead."))
 o.datatype = "range(1,32)"
 o.default = "8"
 end
