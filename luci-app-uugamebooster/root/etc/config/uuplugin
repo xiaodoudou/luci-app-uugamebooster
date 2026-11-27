@@ -18,6 +18,7 @@ config uuplugin
 	# the proxy's own chains, so neither writes the proxy's config or restarts
 	# it. UA3F has no bypass: it is a User-Agent rewriter, not a proxy.
 	option openclash_mode 'cooperative'
+	option ssrplus_mode 'cooperative'
 	# off | cooperative | bypass
 	option nikki_mode 'cooperative'
 	# Shared by every coexistence daemon: how often to re-check UU's routes,

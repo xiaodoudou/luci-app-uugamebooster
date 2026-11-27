@@ -20,16 +20,18 @@ The copies had already started to drift: the OpenClash one had grown the UDP-por
 | | |
 |---|---|
 | `NAME`, `LABEL`, `CONFIG` | identifier, display name, and the uci file whose presence means "installed" |
-| `sync_family`, `sync_table` | where the proxy keeps its rules |
-| `sync_chains` | the chains to act on, one per line. Empty output means "not intercepting yet" — the engine waits instead of guessing |
+| `sync_family`, `sync_table` | the default location for a single-table backend |
+| `sync_tables` | optional. List multiple locations as `family/table` pairs, one per line |
+| `sync_chains` | the live chains in the current `$FAMILY` and `$TBL`. Empty output makes the engine wait for that table |
 | `sync_dest_match` | optional. The destination exemption's match; defaults to source + destination, which covers a plain split |
 | `sync_extra_rules` | optional. Further `tag|match` lines for DNS, UDP ports, fwmark |
 | `sync_before_apply`, `sync_on_cleanup` | optional. Edit the proxy's own config around a boost, and undo it |
-| `sync_bypass_on`, `sync_bypass_off` | optional. Whole-device bypass, for proxies that support it |
+| `SYNC_LEASE` | optional. Set to `1` when a proxy can restore snapshots of its tables. Exemptions require a current absolute deadline |
+| `SYNC_PREFIXES` | optional. Set to `0` for a custom match that does not store destination prefixes |
 
 `uu-sync.d/nikki.sh` is the smallest useful example.
 
-The engine owns the rest: the poll loop, the two nftables sets, reconciliation, the lock that keeps one instance per backend, and teardown.
+The engine discovers boosted devices once per poll and reads routes for backends using destination sets. It then updates the sets and rules independently in each live table. The engine also owns the single-instance lock and cleanup.
 
 ## Why it repairs itself
 
@@ -47,7 +49,7 @@ One **Coexistence** tab, generated from the descriptors. Each installed proxy ge
 | **Take whole devices off** (`bypass`) | a boosted device skips the proxy entirely, whatever it is talking to |
 | **Leave it alone** (`off`) | nothing gets touched |
 
-The two modes differ by one match expression, not by mechanism: cooperative wants `device AND destination`, bypass wants `device` alone. Both are nftables rules in the proxy's own chains, so neither writes the proxy's configuration and switching between them never restarts it. UA3F has no bypass — it rewrites User-Agents rather than proxying, so "off the proxy" would be the wrong words for it.
+Cooperative mode matches the device and its destination. Bypass mode matches the device alone. Both use nftables rules in the proxy's chains. UA3F offers cooperative mode and off.
 
 A proxy the plugin has never been told about still appears, because the tab is built by listing `uu-sync.d/`. So does its line on the status page, and its count of active exemptions.
 

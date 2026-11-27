@@ -192,6 +192,8 @@ jobs:
             || { echo "catalogue missing from the main package"; exit 1; }
           find . -name 'uu-view-preload-aarch64.so' -print -quit | grep . \
             || { echo "view filters missing from the SDK build"; exit 1; }
+          find . -path '*/luci-app-uugamebooster/usr/libexec/uuplugin/uu-sync.d/ssrplus.sh' -print -quit | grep . \
+            || { echo "SSR+ coexistence backend missing from the main package"; exit 1; }
 
       - name: Collect the package
         run: |

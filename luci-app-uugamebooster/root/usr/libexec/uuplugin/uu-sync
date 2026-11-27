@@ -36,13 +36,15 @@
 #                             whose presence means "installed"
 #   sync_family               nftables family: inet
 #   sync_table                table name inside that family
-#   sync_chains               the chains to act on, one per line; empty means
-#                             the proxy is not intercepting yet
+#   sync_tables               optional override listing family/table pairs
+#   sync_chains               the live chains in the current $FAMILY/$TBL
 #   sync_dest_match           (optional) the destination exemption's match
-#                             expression; defaults to source+destination
-#   sync_extra_rules <ips>    (optional) further "tag|match" lines, e.g. DNS
+#                             expression, passed the list of UU tunnel names
+#   sync_extra_rules <ips> <tuns>  (optional) further "tag|match" lines
 #   sync_before_apply <ips>   (optional) run before the sets are rebuilt
 #   sync_on_cleanup           (optional) undo whatever sync_before_apply did
+#   SYNC_LEASE=1              expire exemptions even if the proxy saves them
+#   SYNC_PREFIXES=0           custom match does not use destination sets
 #
 # Both modes run the same loop over the same sets. What differs is one match
 # expression: cooperative exempts a boosted device's traffic *to somewhere UU
@@ -58,16 +60,22 @@ LOG_TAG="uu-$BACKEND"
 
 DESC="$SYNC_DIR/$BACKEND.sh"
 [ -f "$DESC" ] || { echo "uu-sync: no such backend: $BACKEND" >&2; exit 1; }
+
+sync_tables() { printf '%s/%s\n' "$(sync_family)" "$(sync_table)"; }
+SYNC_LEASE=0
+SYNC_PREFIXES=1
 . "$DESC"
+TABLES="$(sync_tables)"
 
-FAMILY="$(sync_family)"
-TBL="$(sync_table)"
-
-# The two sets are ours, not the proxy's, but they have to live in the proxy's
-# table: an nftables rule cannot reference another table's set.
+# These sets live in each proxy table because nftables rules can reference
+# sets only in their own table.
 SET_SRC="uu_boosted"
 SET_DST="uu_dev_dests"
 SET_OLD="uu_dests"
+SET_LEASE="uu_sync_lease"
+SET_BYPASS_LEASE="uu_sync_bypass_lease"
+LEASE_SET="$SET_LEASE"
+[ "$MODE" != "bypass" ] || LEASE_SET="$SET_BYPASS_LEASE"
 # Comment tags of the per-proxy daemons this engine replaced.
 LEGACY_TAGS="uu-coop-|uu-hp-|uu-ua3f-"
 
@@ -85,14 +93,31 @@ LOCK_DIR="/var/run/uu-$BACKEND.lock"
 
 # ------------------------------------------------------------------ nftables
 
+active_tables() {
+	local target FAMILY TBL
+	for target in $TABLES; do
+		FAMILY="${target%/*}" TBL="${target#*/}"
+		[ -z "$(sync_chains)" ] || echo "$target"
+	done
+}
+
 # The destination set is keyed on device and prefix together, so each device is
 # exempted only for what UU routes for it (device_pairs in uu-lib.sh).
 ensure_sets() {
-	nft add set $FAMILY $TBL "$SET_SRC" '{ type ipv4_addr; }' 2>/dev/null
-	nft add set $FAMILY $TBL "$SET_DST" '{ type ipv4_addr . ipv4_addr; flags interval; }' 2>/dev/null
+	nft add set $FAMILY $TBL "$SET_SRC" '{ type ipv4_addr; }' &&
+	{ [ "$SYNC_PREFIXES" = "0" ] ||
+		nft add set $FAMILY $TBL "$SET_DST" '{ type ipv4_addr . ipv4_addr; flags interval; }'; } &&
+	{ [ "$SYNC_LEASE" != "1" ] ||
+		nft add set $FAMILY $TBL "$LEASE_SET" '{ typeof meta time; flags interval; }'; }
 }
 
-have_sets() { nft list set $FAMILY $TBL "$SET_DST" >/dev/null 2>&1; }
+have_sets() {
+	nft -t list set $FAMILY $TBL "$SET_SRC" >/dev/null 2>&1 &&
+	{ [ "$SYNC_PREFIXES" = "0" ] ||
+		nft -t list set $FAMILY $TBL "$SET_DST" >/dev/null 2>&1; } &&
+	{ [ "$SYNC_LEASE" != "1" ] ||
+		nft -t list set $FAMILY $TBL "$LEASE_SET" >/dev/null 2>&1; }
+}
 
 # Our tags present in a chain, one per line.
 tags_in() {
@@ -100,10 +125,16 @@ tags_in() {
 		sed -n "s/.*comment \"\($TAG_PREFIX[^\"]*\)\".*/\1/p"
 }
 
-has_any_rule() {
-	local c
-	for c in $(sync_chains); do
-		nft list chain $FAMILY $TBL "$c" 2>/dev/null | grep -q "$TAG_PREFIX" && return 0
+has_exemptions() {
+	local target FAMILY TBL c
+	for target in $TABLES; do
+		FAMILY="${target%/*}" TBL="${target#*/}"
+		for c in "$SET_SRC" "$SET_DST" "$SET_LEASE" "$SET_BYPASS_LEASE"; do
+			nft -t list set $FAMILY $TBL "$c" >/dev/null 2>&1 && return 0
+		done
+		for c in $(sync_chains); do
+			[ -z "$(tags_in "$c")" ] || return 0
+		done
 	done
 	return 1
 }
@@ -121,23 +152,45 @@ del_tag() {
 # Rules a pre-engine daemon left behind, e.g. one killed rather than stopped
 # during an upgrade. Their sets can only be deleted once these are gone.
 del_legacy() {
-	local c h
-	for c in $(sync_chains); do
-		for h in $(nft -a list chain $FAMILY $TBL "$c" 2>/dev/null |
-		           grep -E "comment \"($LEGACY_TAGS)" |
-		           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
-			nft delete rule $FAMILY $TBL "$c" handle "$h" 2>/dev/null
+	local target FAMILY TBL c h
+	for target in $TABLES; do
+		FAMILY="${target%/*}" TBL="${target#*/}"
+		for c in $(sync_chains); do
+			for h in $(nft -a list chain $FAMILY $TBL "$c" 2>/dev/null |
+			           grep -E "comment \"($LEGACY_TAGS)" |
+			           sed -n 's/.*# handle \([0-9]*\)$/\1/p' | sort -rn); do
+				nft delete rule $FAMILY $TBL "$c" handle "$h" 2>/dev/null
+			done
 		done
+		nft delete set $FAMILY $TBL "$SET_OLD" 2>/dev/null
 	done
-	nft delete set $FAMILY $TBL "$SET_OLD" 2>/dev/null
 }
 
 # Make one chain match "$want" exactly: "tag|match" lines. Rules are inserted at
 # the top, because an exemption that sits below the proxy's own decision is not
 # an exemption.
+tags_at_head() {
+	nft -a list chain $FAMILY $TBL "$1" 2>/dev/null |
+		awk -v prefix="comment \"${TAG_PREFIX}" '
+			/ # handle [0-9]+$/ && !index($0, "{ # handle") {
+				at = index($0, prefix)
+				if (!at) { proxy_rule_seen = 1; next }
+				tag = substr($0, at + length(prefix))
+				sub(/".*/, "", tag)
+				if (proxy_rule_seen || seen[tag]++) exit 1
+			}'
+}
+
 reconcile_chain() {
-	local c="$1" want="$2" have tag match
+	local c="$1" want="$2" have tag match guard=""
 	have="$(tags_in "$c")"
+	[ "$SYNC_LEASE" != "1" ] || guard="meta time @$LEASE_SET"
+	if [ -n "$guard" ] && [ -n "$have" ] && ! tags_at_head "$c"; then
+		# Restoring or reloading an SSR+ table can add rules before ours or
+		# produce duplicate tags. Move each exemption back to the start.
+		for tag in $have; do del_tag "$c" "$tag"; done
+		have=""
+	fi
 
 	for tag in $have; do
 		printf '%s\n' "$want" | grep -q "^$tag|" || del_tag "$c" "$tag"
@@ -146,8 +199,8 @@ reconcile_chain() {
 	printf '%s\n' "$want" | while IFS='|' read -r tag match; do
 		[ -n "$tag" ] && [ -n "$match" ] || continue
 		printf '%s\n' "$have" | grep -qx "$tag" && continue
-		nft insert rule $FAMILY $TBL "$c" $match counter return \
-			comment "\"$tag\"" 2>/dev/null
+		nft insert rule $FAMILY $TBL "$c" $match $guard counter return \
+			comment "\"$tag\"" || return 1
 	done
 }
 
@@ -161,11 +214,54 @@ apply_sets() {
 		if [ -n "$ips" ]; then
 			echo "add element $FAMILY $TBL $SET_SRC { $(echo $ips | tr ' ' ',') }"
 		fi
-		echo "flush set $FAMILY $TBL $SET_DST"
-		pair_batches "$FAMILY $TBL $SET_DST" "$pairs"
+		if [ "$SYNC_PREFIXES" = "1" ]; then
+			echo "flush set $FAMILY $TBL $SET_DST"
+			pair_batches "$FAMILY $TBL $SET_DST" "$pairs"
+		fi
 	} > "$NFT_TMP"
 
-	nft -f "$NFT_TMP" 2>/dev/null
+	nft -f "$NFT_TMP"
+}
+
+# Renew the current device set atomically with the deadline. A proxy snapshot
+# restored between checking the lease and renewing it may contain older devices.
+# Each mode has its own lease so a restored bypass rule cannot be renewed by
+# a synchronizer running in split mode.
+refresh_lease() {
+	local deadline="$1" ips="$2"
+	nft -f - <<-EOF
+		flush set $FAMILY $TBL $SET_SRC
+		add element $FAMILY $TBL $SET_SRC { $(echo $ips | tr ' ' ',') }
+		flush set $FAMILY $TBL $LEASE_SET
+		add element $FAMILY $TBL $LEASE_SET { 0-$deadline }
+	EOF
+}
+
+apply_target() {
+	local target="$1" ips="$2" pairs="$3" want="$4" sets_changed="$5" rules_changed="$6"
+	local deadline="$7" previous_deadline="$8"
+	local FAMILY="${target%/*}" TBL="${target#*/}" c tag
+	if ! have_sets; then
+		ensure_sets || return 1
+		sets_changed=1
+	fi
+	if [ -n "$deadline" ] && { [ -z "$previous_deadline" ] ||
+		! nft get element $FAMILY $TBL "$LEASE_SET" "{ $previous_deadline }" >/dev/null 2>&1; }; then
+		# An old SSR+ snapshot can restore the sets and tags as well as
+		# the chain. Rebuild the contents before renewing that lease.
+		sets_changed=1
+		rules_changed=1
+	fi
+	if [ "$sets_changed" = "1" ]; then
+		apply_sets "$ips" "$pairs" || return 1
+	fi
+	for c in $(sync_chains); do
+		if [ "$rules_changed" = "1" ]; then
+			for tag in $(tags_in "$c"); do del_tag "$c" "$tag"; done
+		fi
+		reconcile_chain "$c" "$want" || return 1
+	done
+	[ -z "$deadline" ] || refresh_lease "$deadline" "$ips"
 }
 
 # ------------------------------------------------------------------ intent
@@ -175,7 +271,7 @@ apply_sets() {
 # proxy. A backend may narrow it (UA3F only touches TCP) but not widen it.
 dest_match() {
 	if type sync_dest_match >/dev/null 2>&1; then
-		sync_dest_match
+		sync_dest_match "$1"
 	else
 		echo "ip saddr . ip daddr @$SET_DST"
 	fi
@@ -185,29 +281,37 @@ dest_match() {
 # one rule and no destination set at all: the device leaves the proxy whichever
 # way its traffic is headed, which is exactly the difference from cooperative.
 desired_rules() {
-	local ips="$1" mode="$2"
+	local ips="$1" mode="$2" tuns="$3" match
 	if [ "$mode" = "bypass" ]; then
 		echo "$TAG_BYPASS|ip saddr @$SET_SRC"
 		return 0
 	fi
-	echo "$TAG_DEST|$(dest_match)"
-	type sync_extra_rules >/dev/null 2>&1 && sync_extra_rules "$ips"
+	match="$(dest_match "$tuns")"
+	[ -z "$match" ] || echo "$TAG_DEST|$match"
+	type sync_extra_rules >/dev/null 2>&1 && sync_extra_rules "$ips" "$tuns"
 	return 0
 }
 
 # ------------------------------------------------------------------ teardown
 
 teardown() {
-	local c tag
-	for c in $(sync_chains); do
-		for tag in $(tags_in "$c"); do
-			del_tag "$c" "$tag"
-		done
-	done
+	local target FAMILY TBL c tag
 	del_legacy
-	# Sets last: a set still referenced by a rule cannot be deleted.
-	nft delete set $FAMILY $TBL "$SET_SRC" 2>/dev/null
-	nft delete set $FAMILY $TBL "$SET_DST" 2>/dev/null
+	for target in $TABLES; do
+		FAMILY="${target%/*}" TBL="${target#*/}"
+		for c in $(sync_chains); do
+			for tag in $(tags_in "$c"); do
+				del_tag "$c" "$tag"
+			done
+		done
+		# Sets last: a set still referenced by a rule cannot be deleted.
+		nft delete set $FAMILY $TBL "$SET_SRC" 2>/dev/null
+		nft delete set $FAMILY $TBL "$SET_DST" 2>/dev/null
+		if [ "$SYNC_LEASE" = "1" ]; then
+			nft delete set $FAMILY $TBL "$SET_LEASE" 2>/dev/null
+			nft delete set $FAMILY $TBL "$SET_BYPASS_LEASE" 2>/dev/null
+		fi
+	done
 	rm -f "$WANT"
 }
 
@@ -225,12 +329,19 @@ cleanup() {
 # bypass is no longer a separate code path, a separate apply step, and a proxy
 # restart: it is the same loop with one less condition in the match.
 run_sync() {
-	local mode="$1" ips pairs prefixes sig prev want up="" c t
+	local mode="$1" targets target ips tuns pairs prefixes sig want up=""
+	local sets_changed rules_changed ok deadline="" previous_deadline=""
 
 	rm -f "$WANT"
 	: > "$STATE"
+	if [ "$SYNC_LEASE" = "1" ]; then
+		case "$INTERVAL" in
+			''|*[!0-9]*|0*) INTERVAL=5 ;;
+		esac
+	fi
 	while :; do
-		if [ -z "$(sync_chains)" ]; then
+		targets="$(active_tables)"
+		if [ -z "$targets" ]; then
 			# The proxy stopped, or is rebuilding its tables: its chains are
 			# gone and our rules with them, so the next pass that finds it back
 			# has to refill the sets.
@@ -253,7 +364,7 @@ run_sync() {
 			# behave without this plugin. The live state is checked as well as
 			# the signature file: after a daemon restart the signature is gone
 			# but stale elements can still be in the set.
-			if [ -s "$SIG" ] || have_sets || has_any_rule; then
+			if [ -s "$SIG" ] || has_exemptions; then
 				log "No devices boosted; removing the $LABEL exemptions."
 				teardown
 				type sync_on_cleanup >/dev/null 2>&1 && sync_on_cleanup
@@ -266,46 +377,51 @@ run_sync() {
 
 		# Only cooperative cares where the traffic is headed, so bypass skips
 		# reading UU's destination prefixes altogether.
-		pairs=""
+		tuns="" pairs=""
 		if [ "$mode" = "cooperative" ]; then
-			pairs="$(device_pairs "$ips" $(find_tuns))"
+			tuns="$(find_tuns)"
+			[ "$SYNC_PREFIXES" = "0" ] || pairs="$(device_pairs "$ips" $tuns)"
 		fi
-		prefixes="$(pair_prefixes "$pairs")"
-		sig="$(printf '%s|%s|%s' "$mode" "$ips" "$pairs" | md5sum | awk '{print $1}')"
-		prev="$(cat "$SIG" 2>/dev/null)"
-
-		# A proxy or fw4 reload drops the sets but leaves the signature behind,
-		# so recreated sets have to be refilled whatever it says.
-		if ! have_sets; then
-			ensure_sets
-			prev=""
-		fi
+		sig="$(printf '%s|%s|%s|%s|%s' "$mode" "$targets" "$ips" "$pairs" "$tuns" |
+			md5sum | awk '{print $1}')"
+		sets_changed=0
+		[ "$sig" = "$(cat "$SIG" 2>/dev/null)" ] || sets_changed=1
 		type sync_before_apply >/dev/null 2>&1 && sync_before_apply "$ips"
 
-		# Always re-check the rules, not only when the signature changed: a
-		# proxy reload wipes them while everything else stays the same. A rule
-		# whose match changed (another device's mark, another UDP slice) keeps
-		# its tag, so a changed wish list replaces every rule rather than
-		# leaving the stale one in place.
-		want="$(desired_rules "$ips" "$mode")"
-		if [ "$want" != "$(cat "$WANT" 2>/dev/null)" ]; then
-			for c in $(sync_chains); do
-				for t in $(tags_in "$c"); do del_tag "$c" "$t"; done
-			done
-			printf '%s\n' "$want" > "$WANT"
+		# Check each table even when the boost didn't change: a proxy can
+		# rebuild just one of its tables or restore it from a snapshot.
+		want="$(desired_rules "$ips" "$mode" "$tuns")"
+		rules_changed=0
+		[ "$want" = "$(cat "$WANT" 2>/dev/null)" ] || rules_changed=1
+		ok=1
+		if [ "$SYNC_LEASE" = "1" ]; then
+			deadline="$(( $(date +%s) + 3 * INTERVAL + 5 ))"
 		fi
-		for c in $(sync_chains); do
-			reconcile_chain "$c" "$want"
+		for target in $targets; do
+			if ! apply_target "$target" "$ips" "$pairs" "$want" "$sets_changed" "$rules_changed" \
+				"$deadline" "$previous_deadline"; then
+				err "Failed to synchronize $LABEL exemptions in $target."
+				ok=0
+			fi
 		done
 
-		if [ "$sig" != "$prev" ]; then
-			if apply_sets "$ips" "$pairs"; then
+		if [ "$ok" = "1" ]; then
+			previous_deadline="$deadline"
+			[ "$rules_changed" = "0" ] || printf '%s\n' "$want" > "$WANT"
+			if [ "$sets_changed" = "1" ]; then
 				echo "$sig" > "$SIG"
 				if [ "$mode" = "bypass" ]; then
 					printf '%s\n' $ips > "$STATE"
 					log "Boosted: $(echo $ips | tr '\n' ' ')- excluded from" \
 					    "$LABEL entirely."
+				elif [ "$SYNC_PREFIXES" = "0" ]; then
+					: > "$STATE"
+					if [ -n "$want" ]; then
+						printf '%s\n' $ips > "$STATE"
+						log "Exempting UU-routed traffic from $LABEL for $(echo $ips | tr '\n' ' ')"
+					fi
 				else
+					prefixes="$(pair_prefixes "$pairs")"
 					# "echo $empty > file" still writes a newline, which the
 					# status page would count as one prefix.
 					if [ -n "$prefixes" ]; then
@@ -317,8 +433,6 @@ run_sync() {
 					    "$(echo "$prefixes" | grep -c .) destination prefix(es)" \
 					    "from $LABEL."
 				fi
-			else
-				err "Failed to apply nftables sets (see $NFT_TMP)."
 			fi
 		fi
 

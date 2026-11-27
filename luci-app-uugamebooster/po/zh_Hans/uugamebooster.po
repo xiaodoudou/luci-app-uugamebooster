@@ -138,6 +138,10 @@ msgid "Rewrites the User-Agent of LAN traffic by diverting TCP to itself. Only T
 msgstr "把局域网 TCP 引流到自己身上来改写 User-Agent。只豁免 TCP，因为 UA3F 也只碰 TCP。"
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:157
+msgid "Intercepts LAN traffic in its own nftables chains. In split mode, UU's live routes determine which IPv4 traffic bypasses SSR+."
+msgstr "在自己的 nftables 链中接管局域网流量。分流时，根据 UU 的实时路由决定哪些 IPv4 流量绕过 SSR+。"
+
+#: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:157
 msgid "Game traffic reaches UU's tunnel on its own; only DNS collides. Keeping a boosted device on PassWall's resolver can hand the game addresses UU does not route, so this is off unless PassWall's DNS matters more."
 msgstr "游戏流量本身就会进入 UU 的隧道，冲突的只有 DNS。让被加速设备继续使用 PassWall 的解析，可能会让游戏拿到 UU 不路由的地址，所以默认关闭，除非 PassWall 的 DNS 对你更重要。"
 
@@ -182,8 +186,8 @@ msgid "Widest route to divert"
 msgstr "允许分流的最大网段"
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:213
-msgid "A safety limit, as a prefix length: a route broader than this is never sent around the proxy. Stops one stray default route from pulling the whole internet out of it."
-msgstr "安全阈值，用前缀长度表示：比它更宽的路由永远不会被绕开代理。避免一条误加的默认路由把整个互联网都从代理里拉出去。"
+msgid "The minimum prefix length for proxies using destination sets. SSR+ uses a live route lookup instead."
+msgstr "使用目标地址集合的代理所允许的最短路由前缀。SSR+ 使用实时路由查询。"
 
 #: luci-app-uugamebooster/luasrc/model/cbi/uuplugin.lua:223
 msgid "Devices UU is allowed to see"
